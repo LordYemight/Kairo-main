@@ -1,0 +1,2839 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Kairo - Enhanced Task Management</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Lucide Icons -->
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <!-- SheetJS for Excel export/import -->
+    <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+    <!-- EmailJS for sending emails -->
+    <script src="https://cdn.jsdelivr.net/npm/@emailjs/browser@3/dist/email.min.js"></script>
+    <script>
+        // Initialize EmailJS with your public key
+        (function() {
+            emailjs.init("YOUR_PUBLIC_KEY_HERE");
+        })();
+    </script>
+    <style>
+        :root {
+            --transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+        body {
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+            transition: var(--transition);
+        }
+        .task-card {
+            transition: var(--transition);
+            border-radius: 1rem;
+            box-shadow: 0 2px 6px rgba(0,0,0,0.05);
+        }
+        .task-card:hover {
+            transform: translateY(-3px);
+            box-shadow: 0 6px 16px rgba(0,0,0,0.08);
+        }
+        .progress-bar {
+            transition: width 0.5s ease-in-out;
+            border-radius: 999px;
+        }
+        .notification {
+            animation: slideIn 0.3s ease-out;
+        }
+        @keyframes slideIn {
+            from { transform: translateX(100%); opacity: 0; }
+            to { transform: translateX(0); opacity: 1; }
+        }
+        .dark-mode {
+            background-color: #111827;
+            color: #e5e7eb;
+        }
+        .dark-mode .card,
+        .dark-mode .bg-white {
+            background-color: #1f2937;
+            color: #f9fafb;
+            border-color: #374151;
+        }
+        .dark-mode input,
+        .dark-mode textarea,
+        .dark-mode select {
+            background-color: #111827;
+            border-color: #374151;
+            color: #f9fafb;
+        }
+        .dark-mode input::placeholder,
+        .dark-mode textarea::placeholder {
+            color: #9ca3af;
+        }
+        .kairo-column {
+            min-height: 500px;
+            border-radius: 1rem;
+            background: #f9fafb;
+        }
+        .dark-mode .kairo-column {
+            background: #1f2937;
+        }
+        .kairo-task {
+            cursor: move;
+            border-radius: 0.75rem;
+        }
+        .calendar-day {
+            cursor: pointer;
+            transition: var(--transition);
+            min-height: 80px;
+            display: flex;
+            flex-direction: column;
+        }
+        .calendar-day:hover {
+            background-color: #f0f9ff;
+        }
+        .calendar-day.has-tasks {
+            background-color: #e0f2fe;
+        }
+        .dark-mode .calendar-day.has-tasks {
+            background-color: #1e3a8a;
+        }
+        .dark-mode .calendar-day:hover {
+            background-color: #1f2937;
+        }
+        .notification-item {
+            border-left: 3px solid;
+        }
+        .notification-info { border-left-color: #3b82f6; }
+        .notification-success { border-left-color: #10b981; }
+        .notification-warning { border-left-color: #f59e0b; }
+        .notification-error { border-left-color: #ef4444; }
+        .sidebar-collapsed {
+            width: 64px !important;
+        }
+        .sidebar-collapsed .sidebar-text,
+        .sidebar-collapsed .quick-stats {
+            display: none;
+        }
+        .sidebar-collapsed .nav-button {
+            justify-content: center;
+            padding: 0.75rem;
+        }
+        .payment-progress {
+            height: 6px;
+            border-radius: 3px;
+        }
+        .calendar-nav {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 1.25rem;
+        }
+        .details-dropdown {
+            transition: all 0.3s ease;
+            overflow: hidden;
+        }
+        .details-dropdown.closed {
+            max-height: 0;
+            opacity: 0;
+        }
+        .details-dropdown.open {
+            max-height: 500px;
+            opacity: 1;
+        }
+        .dropdown-chevron {
+            transition: transform 0.3s ease;
+        }
+        .dropdown-chevron.rotated {
+            transform: rotate(180deg);
+        }
+        .focus-mode-active {
+            overflow: hidden;
+        }
+        .focus-mode-active #sidebar,
+        .focus-mode-active #header,
+        .focus-mode-active #quick-add-button,
+        .focus-mode-active #notifications-button,
+        .focus-mode-active #settings-button,
+        .focus-mode-active #dark-mode-toggle {
+            display: none !important;
+        }
+        .task-type-selector {
+            position: fixed;
+            bottom: 6rem;
+            right: 6rem;
+            background: white;
+            border-radius: 1.25rem;
+            box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
+            z-index: 40;
+            overflow: hidden;
+            transition: all 0.3s ease;
+            transform-origin: bottom right;
+        }
+        .task-type-selector.hidden {
+            transform: scale(0);
+            opacity: 0;
+        }
+        .task-type-option {
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+            padding: 1rem 1.25rem;
+            cursor: pointer;
+            transition: background-color 0.2s;
+        }
+        .task-type-option:hover {
+            background-color: #f3f4f6;
+        }
+        .task-type-option:not(:last-child) {
+            border-bottom: 1px solid #e5e7eb;
+        }
+        .about-section {
+            margin-bottom: 2rem;
+        }
+        .benefit-item {
+            display: flex;
+            align-items: flex-start;
+            margin-bottom: 1.25rem;
+        }
+        .benefit-icon {
+            background-color: #dbeafe;
+            border-radius: 50%;
+            padding: 0.625rem;
+            margin-right: 1rem;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            flex-shrink: 0;
+        }
+        .contact-info {
+            display: flex;
+            align-items: center;
+            margin-bottom: 0.75rem;
+        }
+        .contact-icon {
+            margin-right: 0.5rem;
+            width: 20px;
+            text-align: center;
+        }
+        .first-time-modal {
+            z-index: 100;
+        }
+        .form-input-group {
+            margin-bottom: 1.5rem;
+        }
+        .form-label {
+            display: flex;
+            align-items: center;
+            margin-bottom: 0.5rem;
+            font-weight: 600;
+            color: #1f2937;
+        }
+        .dark-mode .form-label {
+            color: #f9fafb;
+        }
+        .form-emoji {
+            margin-right: 0.5rem;
+            font-size: 1.25rem;
+        }
+        .copy-icon {
+            cursor: pointer;
+            margin-left: 0.5rem;
+            opacity: 0.7;
+            transition: opacity 0.2s;
+        }
+        .copy-icon:hover {
+            opacity: 1;
+        }
+        .hidden-amount {
+            filter: blur(2px);
+            user-select: none;
+        }
+        @media (max-width: 768px) {
+            #sidebar {
+                position: fixed;
+                left: -100%;
+                z-index: 40;
+                height: 100vh;
+                transition: left 0.3s ease;
+            }
+            #sidebar.mobile-open {
+                left: 0;
+            }
+            #main-content {
+                margin-left: 0 !important;
+                width: 100%;
+            }
+            .kairo-column {
+                min-height: 300px;
+            }
+            .calendar-day {
+                min-height: 60px;
+                padding: 0.25rem;
+            }
+            .calendar-day span {
+                font-size: 0.75rem;
+            }
+            #header .max-w-7xl {
+                padding: 0 1rem;
+            }
+            .grid-cols-1 {
+                grid-template-columns: 1fr;
+            }
+            .grid-cols-7 {
+                grid-template-columns: repeat(7, minmax(0, 1fr));
+            }
+            .task-card {
+                margin-bottom: 1rem;
+            }
+            #quick-add-button {
+                bottom: 5rem;
+                right: 1rem;
+            }
+            .task-type-selector {
+                bottom: 10rem;
+                right: 1rem;
+            }
+        }
+        @media (max-width: 640px) {
+            .flex.max-w-7xl {
+                flex-direction: column;
+            }
+            #header .flex.justify-between {
+                flex-direction: column;
+                gap: 1rem;
+            }
+            .calendar-nav {
+                flex-direction: column;
+                gap: 1rem;
+            }
+            .grid.grid-cols-7 .p-3 {
+                padding: 0.5rem;
+                font-size: 0.75rem;
+            }
+        }
+    </style>
+</head>
+<body class="bg-gray-50 min-h-screen">
+    <div id="app">
+        <!-- First Time User Modal -->
+        <div id="first-time-modal" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4 first-time-modal">
+            <div class="bg-white rounded-xl p-6 w-full max-w-md max-h-[90vh] overflow-y-auto shadow-2xl">
+                <div class="text-center mb-4">
+                    <h3 class="text-2xl font-bold text-blue-600">Welcome to Kairo!</h3>
+                    <p class="text-blue-600 mt-1">Your Task Management space</p>
+                    <p class="text-gray-600 mt-2">Please provide your details to get started</p>
+                </div>
+                <form id="first-time-form" class="space-y-4">
+                    <div class="form-input-group">
+                        <label class="form-label">
+                            <span class="form-emoji">👤</span> Full Name
+                        </label>
+                        <input type="text" id="user-fullname" class="w-full p-3 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent" placeholder="Enter your full name" required>
+                    </div>
+                    <div class="form-input-group">
+                        <label class="form-label">
+                            <span class="form-emoji">⚧️</span> Gender
+                        </label>
+                        <select id="user-gender" class="w-full p-3 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent" required>
+                            <option value="">Select your gender</option>
+                            <option value="Male">Male</option>
+                            <option value="Female">Female</option>
+                            <option value="Other">Other</option>
+                            <option value="Prefer not to say">Prefer not to say</option>
+                        </select>
+                    </div>
+                    <div class="form-input-group">
+                        <label class="form-label">
+                            <span class="form-emoji">📧</span> Gmail
+                        </label>
+                        <input type="email" id="user-email" class="w-full p-3 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent" placeholder="Enter your email address" required>
+                    </div>
+                    <div class="form-input-group">
+                        <label class="form-label">
+                            <span class="form-emoji">📱</span> WhatsApp Contact
+                        </label>
+                        <input type="tel" id="user-whatsapp" class="w-full p-3 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent" placeholder="Enter your WhatsApp number" required>
+                    </div>
+                    <div class="flex gap-2 pt-4">
+                        <button type="submit" class="flex-1 bg-blue-600 text-white py-3 px-4 rounded-lg hover:bg-blue-700 transition-colors font-medium">Submit & Continue</button>
+                    </div>
+                </form>
+                <p class="text-xs text-gray-500 mt-4 text-center">
+                    By submitting this form, you agree to our terms of service and privacy policy.
+                </p>
+            </div>
+        </div>
+        <!-- Header -->
+        <header id="header" class="bg-gradient-to-r from-blue-600 to-blue-800 text-white p-4 shadow-lg hidden">
+            <div class="max-w-7xl mx-auto flex justify-between items-center">
+                <div class="flex items-center gap-3">
+                    <button id="sidebar-toggle" class="p-2 rounded-lg bg-white bg-opacity-20 hover:bg-opacity-30 transition-colors">
+                        <i data-lucide="menu" class="w-5 h-5"></i>
+                    </button>
+                    <img id="user-logo" src="" alt="Logo" class="w-10 h-10 rounded-full object-cover hidden">
+                    <div>
+                        <h1 class="text-xl font-bold">Kairo</h1>
+                        <p id="welcome-text" class="text-sm opacity-90">Welcome back, Your Name!</p>
+                    </div>
+                </div>
+                <div class="flex items-center gap-3">
+                    <button id="inbox-button" class="p-2 rounded-lg bg-white bg-opacity-20 hover:bg-opacity-30 transition-colors relative" title="Messages">
+                        <i data-lucide="mail" class="w-5 h-5"></i>
+                        <span id="inbox-count" class="absolute -top-1 -right-1 bg-red-500 text-white rounded-full w-5 h-5 text-xs flex items-center justify-center hidden">0</span>
+                    </button>
+                    <button id="dark-mode-toggle" class="p-2 rounded-lg bg-white bg-opacity-20 hover:bg-opacity-30 transition-colors">
+                        <i data-lucide="moon" class="w-5 h-5"></i>
+                    </button>
+                    <button id="notifications-button" class="p-2 rounded-lg bg-white bg-opacity-20 hover:bg-opacity-30 transition-colors relative">
+                        <i data-lucide="bell" class="w-5 h-5"></i>
+                        <span id="notification-count" class="absolute -top-1 -right-1 bg-red-500 text-white rounded-full w-5 h-5 text-xs flex items-center justify-center hidden">0</span>
+                    </button>
+                    <button id="settings-button" class="p-2 rounded-lg bg-white bg-opacity-20 hover:bg-opacity-30 transition-colors">
+                        <i data-lucide="settings" class="w-5 h-5"></i>
+                    </button>
+                </div>
+            </div>
+        </header>
+        <div class="flex max-w-7xl mx-auto hidden" id="main-app">
+            <!-- Sidebar -->
+            <nav id="sidebar" class="w-64 bg-white shadow-sm border-r border-gray-200 min-h-screen transition-all duration-300 mobile-sidebar">
+                <div class="p-4">
+                    <div class="space-y-2">
+                        <button data-page="dashboard" class="nav-button w-full flex items-center gap-3 px-4 py-2.5 rounded-lg transition-colors bg-gradient-to-r from-blue-600 to-blue-800 text-white font-medium">
+                            <i data-lucide="home" class="w-5 h-5"></i>
+                            <span class="sidebar-text">Dashboard</span>
+                        </button>
+                        <button data-page="client" class="nav-button w-full flex items-center gap-3 px-4 py-2.5 rounded-lg transition-colors text-gray-700 hover:bg-gray-100 font-medium">
+                            <i data-lucide="briefcase" class="w-5 h-5"></i>
+                            <span class="sidebar-text">Client Tasks</span>
+                        </button>
+                        <button data-page="personal" class="nav-button w-full flex items-center gap-3 px-4 py-2.5 rounded-lg transition-colors text-gray-700 hover:bg-gray-100 font-medium">
+                            <i data-lucide="user" class="w-5 h-5"></i>
+                            <span class="sidebar-text">Personal Tasks</span>
+                        </button>
+                        <button data-page="due-soon" class="nav-button w-full flex items-center gap-3 px-4 py-2.5 rounded-lg transition-colors text-gray-700 hover:bg-gray-100 font-medium">
+                            <i data-lucide="clock" class="w-5 h-5"></i>
+                            <span class="sidebar-text">Task Due & Soon</span>
+                        </button>
+                        <button data-page="kairo" class="nav-button w-full flex items-center gap-3 px-4 py-2.5 rounded-lg transition-colors text-gray-700 hover:bg-gray-100 font-medium">
+                            <i data-lucide="layout" class="w-5 h-5"></i>
+                            <span class="sidebar-text">Kairo Board</span>
+                        </button>
+                        <button data-page="calendar" class="nav-button w-full flex items-center gap-3 px-4 py-2.5 rounded-lg transition-colors text-gray-700 hover:bg-gray-100 font-medium">
+                            <i data-lucide="calendar" class="w-5 h-5"></i>
+                            <span class="sidebar-text">Calendar</span>
+                        </button>
+                        <button data-page="analytics" class="nav-button w-full flex items-center gap-3 px-4 py-2.5 rounded-lg transition-colors text-gray-700 hover:bg-gray-100 font-medium">
+                            <i data-lucide="bar-chart" class="w-5 h-5"></i>
+                            <span class="sidebar-text">Analytics</span>
+                        </button>
+                        <button data-page="about" class="nav-button w-full flex items-center gap-3 px-4 py-2.5 rounded-lg transition-colors text-gray-700 hover:bg-gray-100 font-medium">
+                            <i data-lucide="info" class="w-5 h-5"></i>
+                            <span class="sidebar-text">About Kairo</span>
+                        </button>
+                    </div>
+                    <div class="mt-8 p-4 bg-gray-50 rounded-lg quick-stats">
+                        <h3 class="font-semibold text-gray-700 mb-2 sidebar-text">Quick Stats</h3>
+                        <div class="space-y-2 text-sm">
+                            <div class="flex justify-between">
+                                <span class="sidebar-text">Total Tasks:</span>
+                                <span id="stat-total" class="font-medium">0</span>
+                            </div>
+                            <div class="flex justify-between">
+                                <span class="sidebar-text">Completed:</span>
+                                <span id="stat-completed" class="font-medium text-green-600">0</span>
+                            </div>
+                            <div class="flex justify-between">
+                                <span class="sidebar-text">Overdue:</span>
+                                <span id="stat-overdue" class="font-medium text-red-600">0</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </nav>
+            <!-- Main Content -->
+            <main id="main-content" class="flex-1 p-6 transition-all duration-300">
+            </main>
+        </div>
+        <!-- Inbox Modal -->
+        <div id="inbox-modal" class="fixed inset-0 bg-black bg-opacity-50 hidden items-center justify-center z-50 p-4">
+            <div class="bg-white rounded-xl p-6 w-full max-w-2xl max-h-[90vh] overflow-y-auto shadow-2xl">
+                <div class="flex justify-between items-center mb-4">
+                    <h3 class="text-xl font-bold">Messages</h3>
+                    <button id="close-inbox" class="text-gray-500 hover:text-gray-700">
+                        <i data-lucide="x" class="w-5 h-5"></i>
+                    </button>
+                </div>
+                <div id="inbox-content" class="space-y-4">
+                    <!-- Messages will be rendered here -->
+                </div>
+            </div>
+        </div>
+        <!-- Task Modal -->
+        <div id="task-modal" class="fixed inset-0 bg-black bg-opacity-50 hidden items-center justify-center z-50 p-4">
+            <div class="bg-white rounded-xl p-6 w-full max-w-md max-h-[90vh] overflow-y-auto shadow-2xl">
+                <h3 class="text-xl font-bold mb-4" id="modal-title">Add Client Task</h3>
+                <div class="space-y-4">
+                    <div id="client-details-dropdown-toggle" class="hidden">
+                        <button type="button" class="w-full flex items-center justify-between p-3 border rounded-lg bg-gray-50 hover:bg-gray-100">
+                            <span id="dropdown-toggle-text">Task Details</span>
+                            <i data-lucide="chevron-down" class="w-4 h-4 dropdown-chevron"></i>
+                        </button>
+                    </div>
+                    <div id="client-details-dropdown" class="details-dropdown closed">
+                        <div id="personal-task-dropdown-container" class="hidden">
+                            <label class="block text-sm font-medium mb-1">Select Personal Task</label>
+                            <select id="personal-task-dropdown" class="w-full p-2.5 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent">
+                                <option value="">Select a task to edit</option>
+                            </select>
+                        </div>
+                        <div id="client-name-field">
+                            <label class="block text-sm font-medium mb-1">Client Name</label>
+                            <input type="text" id="client-name" class="w-full p-2.5 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent" required>
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium mb-1" id="project-label">Project/Task Name</label>
+                            <input type="text" id="project-name" class="w-full p-2.5 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent" required>
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium mb-1">Description</label>
+                            <textarea id="description" class="w-full p-2.5 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent" rows="3"></textarea>
+                        </div>
+                        <div id="files-field">
+                            <label class="block text-sm font-medium mb-1">Task Files</label>
+                            <input type="text" id="files" placeholder="e.g., document.docx, app.exe" class="w-full p-2.5 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent">
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium mb-1">Tags</label>
+                            <div class="flex flex-wrap gap-2 mb-2" id="tags-container"></div>
+                            <div class="flex gap-2">
+                                <input type="text" id="tag-input" placeholder="Add a tag" class="flex-1 p-2.5 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent">
+                                <button id="add-tag" class="px-4 py-2.5 bg-gray-200 rounded-lg hover:bg-gray-300 font-medium">Add</button>
+                            </div>
+                        </div>
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <div>
+                                <label class="block text-sm font-medium mb-1">Start Date</label>
+                                <input type="date" id="start-date" class="w-full p-2.5 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent">
+                            </div>
+                            <div>
+                                <label class="block text-sm font-medium mb-1">Due Date</label>
+                                <input type="date" id="due-date" class="w-full p-2.5 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent">
+                            </div>
+                        </div>
+                    </div>
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div>
+                            <label class="block text-sm font-medium mb-1">Status</label>
+                            <select id="status" class="w-full p-2.5 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent">
+                                <option value="Not Started">Not Started</option>
+                                <option value="Started">Started</option>
+                                <option value="Processing">Processing</option>
+                                <option value="Review">Review</option>
+                                <option value="Review Correction">Review Correction</option>
+                                <option value="Completed">Completed</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium mb-1">Priority</label>
+                            <select id="priority" class="w-full p-2.5 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent">
+                                <option value="Low">Low</option>
+                                <option value="Medium">Medium</option>
+                                <option value="High">High</option>
+                                <option value="Urgent">Urgent</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div id="personal-fields" class="hidden">
+                        <div>
+                            <label class="block text-sm font-medium mb-1">Category</label>
+                            <select id="task-category" class="w-full p-2.5 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent">
+                                <option value="">Select Category</option>
+                                <option value="Home">Home</option>
+                                <option value="Health">Health</option>
+                                <option value="Finance">Finance</option>
+                                <option value="Education">Education</option>
+                                <option value="Personal Development">Personal Development</option>
+                                <option value="Relationships">Relationships</option>
+                                <option value="Hobbies">Hobbies</option>
+                                <option value="Other">Other</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label class="flex items-center">
+                                <input type="checkbox" id="personal-payment-toggle" class="rounded text-blue-600 focus:ring-blue-500">
+                                <span class="ml-2">Enable Payment Tracking</span>
+                            </label>
+                        </div>
+                    </div>
+                    <div id="personal-payment-fields" class="hidden">
+                        <div class="grid grid-cols-1 gap-4">
+                            <div>
+                                <label class="block text-sm font-medium mb-1">Total Amount (₦)</label>
+                                <input type="text" id="personal-total-amount" placeholder="e.g., 1000" class="w-full p-2.5 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent">
+                            </div>
+                            <div>
+                                <label class="block text-sm font-medium mb-1">Outstanding Amount (₦)</label>
+                                <input type="text" id="personal-outstanding-amount" readonly class="w-full p-2.5 border rounded-lg bg-gray-100">
+                            </div>
+                            <div>
+                                <label class="block text-sm font-medium mb-1">Amount Paid (₦)</label>
+                                <input type="text" id="personal-amount-paid" placeholder="e.g., 500" class="w-full p-2.5 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent">
+                            </div>
+                        </div>
+                    </div>
+                    <div id="payment-fields" class="hidden">
+                        <div class="grid grid-cols-1 gap-4">
+                            <div>
+                                <label class="block text-sm font-medium mb-1">Total Amount (₦)</label>
+                                <input type="text" id="total-amount" placeholder="e.g., 1000" class="w-full p-2.5 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent">
+                            </div>
+                            <div>
+                                <label class="block text-sm font-medium mb-1">Outstanding Amount (₦)</label>
+                                <input type="text" id="outstanding-amount" readonly class="w-full p-2.5 border rounded-lg bg-gray-100">
+                            </div>
+                            <div>
+                                <label class="block text-sm font-medium mb-1">Amount Paid (₦)</label>
+                                <input type="text" id="amount-paid" placeholder="e.g., 500" class="w-full p-2.5 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent">
+                            </div>
+                        </div>
+                    </div>
+                    <div class="flex gap-2 pt-4">
+                        <button id="save-task" class="flex-1 bg-blue-600 text-white py-2.5 px-4 rounded-lg hover:bg-blue-700 transition-colors font-medium">Save</button>
+                        <button id="cancel-task" class="flex-1 bg-gray-300 text-gray-700 py-2.5 px-4 rounded-lg hover:bg-gray-400 transition-colors font-medium">Cancel</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <!-- Task Type Selector -->
+        <div id="task-type-selector" class="task-type-selector hidden">
+            <div class="task-type-option" data-type="client">
+                <i data-lucide="briefcase" class="w-5 h-5 text-blue-600"></i>
+                <span>Client Task</span>
+            </div>
+            <div class="task-type-option" data-type="personal">
+                <i data-lucide="user" class="w-5 h-5 text-green-600"></i>
+                <span>Personal Task</span>
+            </div>
+        </div>
+        <!-- Settings Modal -->
+        <div id="settings-modal" class="fixed inset-0 bg-black bg-opacity-50 hidden items-center justify-center z-50 p-4">
+            <div class="bg-white rounded-xl p-6 w-full max-w-md max-h-[90vh] overflow-y-auto shadow-2xl">
+                <h3 class="text-xl font-bold mb-4">App Settings</h3>
+                <div class="space-y-4">
+                    <div>
+                        <label class="block text-sm font-medium mb-1">Your Name</label>
+                        <input type="text" id="user-name" class="w-full p-2.5 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent">
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium mb-1">Logo/Picture</label>
+                        <div class="flex items-center gap-2">
+                            <input type="file" id="logo-upload" accept="image/*" class="flex-1 text-sm">
+                            <img id="logo-preview" src="" alt="Logo" class="w-10 h-10 rounded-full object-cover hidden">
+                        </div>
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium mb-1">Color Theme</label>
+                        <div class="grid grid-cols-5 gap-2">
+                            <button data-theme="blue" class="theme-button w-full h-8 rounded-lg bg-gradient-to-r from-blue-600 to-blue-800 ring-2 ring-gray-400"></button>
+                            <button data-theme="purple" class="theme-button w-full h-8 rounded-lg bg-gradient-to-r from-purple-600 to-purple-800"></button>
+                            <button data-theme="green" class="theme-button w-full h-8 rounded-lg bg-gradient-to-r from-green-600 to-green-800"></button>
+                            <button data-theme="orange" class="theme-button w-full h-8 rounded-lg bg-gradient-to-r from-orange-600 to-orange-800"></button>
+                            <button data-theme="pink" class="theme-button w-full h-8 rounded-lg bg-gradient-to-r from-pink-600 to-pink-800"></button>
+                        </div>
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium mb-1">Notification Preferences</label>
+                        <div class="space-y-2">
+                            <label class="flex items-center">
+                                <input type="checkbox" id="notify-overdue" class="rounded text-blue-600 focus:ring-blue-500" checked>
+                                <span class="ml-2">Notify me about overdue tasks</span>
+                            </label>
+                            <label class="flex items-center">
+                                <input type="checkbox" id="notify-upcoming" class="rounded text-blue-600 focus:ring-blue-500" checked>
+                                <span class="ml-2">Notify me about upcoming deadlines</span>
+                            </label>
+                            <label class="flex items-center">
+                                <input type="checkbox" id="notify-updates" class="rounded text-blue-600 focus:ring-blue-500" checked>
+                                <span class="ml-2">Notify me about task updates</span>
+                            </label>
+                            <label class="flex items-center">
+                                <input type="checkbox" id="notify-payments" class="rounded text-blue-600 focus:ring-blue-500" checked>
+                                <span class="ml-2">Notify me about payment updates</span>
+                            </label>
+                        </div>
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium mb-1">Data Management</label>
+                        <div class="flex gap-2">
+                            <button id="export-data" class="flex-1 bg-gray-200 text-gray-700 py-2.5 px-4 rounded-lg hover:bg-gray-300 transition-colors font-medium">Export Data</button>
+                            <button id="import-data" class="flex-1 bg-gray-200 text-gray-700 py-2.5 px-4 rounded-lg hover:bg-gray-300 transition-colors font-medium">Import Data</button>
+                        </div>
+                        <input type="file" id="import-file" accept=".xlsx,.xls" class="hidden">
+                    </div>
+                </div>
+                <div class="flex gap-2 pt-4">
+                    <button id="save-settings" class="flex-1 bg-blue-600 text-white py-2.5 px-4 rounded-lg hover:bg-blue-700 transition-colors font-medium">Save Settings</button>
+                    <button id="cancel-settings" class="flex-1 bg-gray-300 text-gray-700 py-2.5 px-4 rounded-lg hover:bg-gray-400 transition-colors font-medium">Cancel</button>
+                </div>
+            </div>
+        </div>
+        <!-- Notifications Panel -->
+        <div id="notifications-panel" class="fixed top-16 right-4 w-80 bg-white shadow-xl rounded-lg border border-gray-200 hidden z-50">
+            <div class="p-4 border-b border-gray-200 flex justify-between items-center">
+                <h3 class="font-semibold">Notifications</h3>
+                <div>
+                    <button id="mark-all-read" class="text-blue-600 text-sm mr-2 font-medium">Mark all read</button>
+                    <button id="clear-notifications" class="text-blue-600 text-sm font-medium">Clear All</button>
+                </div>
+            </div>
+            <div class="max-h-96 overflow-y-auto">
+                <div id="notifications-list" class="p-2">
+                </div>
+            </div>
+        </div>
+        <!-- Quick Action Button -->
+        <button id="quick-add-button" class="fixed bottom-6 right-6 w-14 h-14 rounded-full bg-blue-600 text-white shadow-lg flex items-center justify-center hover:bg-blue-700 transition-colors z-40 hidden">
+            <i data-lucide="plus" class="w-6 h-6"></i>
+        </button>
+        <!-- Toast Notifications -->
+        <div id="toast-container" class="fixed bottom-4 right-4 space-y-2 z-50"></div>
+    </div>
+    <script>
+        // App State
+        let currentPage = 'dashboard';
+        let clientTasks = [];
+        let personalTasks = [];
+        let taskTemplates = [];
+        let settings = {
+            userName: 'Your Name',
+            logo: null,
+            theme: 'blue',
+            darkMode: false,
+            sidebarCollapsed: false,
+            notifications: {
+                overdue: true,
+                upcoming: true,
+                updates: true,
+                payments: true
+            }
+        };
+        let editingTask = null;
+        let taskType = 'client';
+        let tags = [];
+        let notifications = [];
+        let messages = [];
+        let calendarDate = new Date();
+        let sortClientTasksByDueDate = false;
+        let selectedCalendarDate = null;
+        let isFirstTimeUser = localStorage.getItem('firstTimeUser') === null;
+        const themes = {
+            blue: 'from-blue-600 to-blue-800',
+            purple: 'from-purple-600 to-purple-800',
+            green: 'from-green-600 to-green-800',
+            orange: 'from-orange-600 to-orange-800',
+            pink: 'from-pink-600 to-pink-800'
+        };
+        const statusOptions = [
+            'Not Started',
+            'Started',
+            'Processing',
+            'Review',
+            'Review Correction',
+            'Completed'
+        ];
+        document.addEventListener('DOMContentLoaded', function() {
+            if (isFirstTimeUser) {
+                showFirstTimeUserModal();
+            } else {
+                loadData();
+                document.getElementById('first-time-modal').classList.add('hidden');
+                document.getElementById('header').classList.remove('hidden');
+                document.getElementById('main-app').classList.remove('hidden');
+                document.getElementById('quick-add-button').classList.remove('hidden');
+                renderUI();
+                lucide.createIcons();
+                setupEventListeners();
+                checkForNotifications();
+                // Show welcome message if not already sent
+                if (!localStorage.getItem('welcomeMessageSent')) {
+                    sendWelcomeMessage();
+                    localStorage.setItem('welcomeMessageSent', 'true');
+                }
+            }
+        });
+        function showFirstTimeUserModal() {
+            const modal = document.getElementById('first-time-modal');
+            modal.classList.remove('hidden');
+            document.getElementById('first-time-form').addEventListener('submit', function(e) {
+                e.preventDefault();
+                processFirstTimeUserForm();
+            });
+        }
+        function processFirstTimeUserForm() {
+            const fullName = document.getElementById('user-fullname').value;
+            const gender = document.getElementById('user-gender').value;
+            const email = document.getElementById('user-email').value;
+            const whatsapp = document.getElementById('user-whatsapp').value;
+            sendRegistrationEmail(fullName, gender, email, whatsapp);
+            settings.userName = fullName;
+            localStorage.setItem('firstTimeUser', 'false');
+            isFirstTimeUser = false;
+            document.getElementById('first-time-modal').classList.add('hidden');
+            document.getElementById('header').classList.remove('hidden');
+            document.getElementById('main-app').classList.remove('hidden');
+            document.getElementById('quick-add-button').classList.remove('hidden');
+            loadData();
+            renderUI();
+            lucide.createIcons();
+            setupEventListeners();
+            checkForNotifications();
+            sendWelcomeMessage();
+            localStorage.setItem('welcomeMessageSent', 'true');
+            showToast(`Welcome to Kairo, ${fullName}!`, 'success');
+        }
+        function sendWelcomeMessage() {
+            const firstName = settings.userName.split(' ')[0];
+            const welcomeText = `Hi ${firstName}, welcome to Kairo 👋
+
+I’m Maayo, founder of Kairo — and I’m thrilled you’re here.
+
+Kairo was built to help busy people and teams take control of their day — not just at work, but in life. Whether you’re managing client deadlines, household priorities, payments, or personal goals, Kairo brings everything into one calm place so you can think clearly and act with confidence.
+
+WHY KAIRO MATTERS
+• Clarity — See every commitment (client tasks + personal tasks) in one place so nothing slips through the cracks.
+• Prioritization — Smart due-date and urgency helpers surface the right tasks so you tackle what matters now.
+• Focus — Use Focus Mode when you need uninterrupted time to complete important work (try a 25-minute session).
+• Organization across life & work — Keep client workflows and personal projects separate but visible together, protecting your time and energy.
+• Payments & progress — Track fees, outstanding amounts and project progress so money and tasks stay aligned.
+• Reflect & improve — Analytics and task history help you learn what works and get better each week.
+
+HOW THIS HELPS YOU — PRACTICAL BENEFITS
+• Spend less time deciding what to do next and more time doing it.  
+• Reduce stress with reliable reminders and a single source of truth.  
+• Improve delivery and client trust by tracking deadlines and payments.  
+• Build better personal habits: plan workouts, bills, learning, or family time alongside work tasks.  
+• Export, import, and back up your data anytime.
+
+QUICK FIRST STEPS
+1. Add your first task — click “+” or use **Add Client Task** / **Add Personal Task**.  
+2. Connect or import — link your calendar or upload tasks to get started fast.  
+3. Set notifications — choose reminders for overdue items, upcoming deadlines, and payments.  
+4. Try Focus Mode — pick one in-progress task and start a 25-minute focus session.  
+5. Explore Kairo Board & Calendar — drag tasks, set priorities, and view due dates visually.
+
+NEED HELP OR FEEDBACK?
+Reply to this message or go to **About → Contact**. I review early-user feedback personally — tell me what would make Kairo even more useful for you.
+
+Welcome again — here’s to calmer days, clearer priorities, and getting the right things done.
+
+Warmly,  
+Maayo  
+Founder, Kairo`;
+            const newMessage = {
+                id: Date.now(),
+                from: 'Maayo',
+                subject: 'Welcome to Kairo!',
+                body: welcomeText,
+                date: new Date().toISOString(),
+                read: false
+            };
+            messages.unshift(newMessage);
+            saveData();
+            updateInboxBadge();
+        }
+        function sendRegistrationEmail(fullName, gender, email, whatsapp) {
+            const templateParams = {
+                full_name: fullName,
+                gender: gender,
+                email: email,
+                whatsapp: whatsapp,
+                registration_date: new Date().toLocaleString()
+            };
+            emailjs.send('service_kairo', 'template_kairo_registration', templateParams)
+                .then(function(response) {
+                    console.log('SUCCESS!', response.status, response.text);
+                }, function(error) {
+                    console.log('FAILED...', error);
+                    sendRegistrationEmailFallback(fullName, gender, email, whatsapp);
+                });
+        }
+        function sendRegistrationEmailFallback(fullName, gender, email, whatsapp) {
+            const formData = new FormData();
+            formData.append('name', fullName);
+            formData.append('gender', gender);
+            formData.append('email', email);
+            formData.append('whatsapp', whatsapp);
+            formData.append('_subject', 'New Kairo User Registration');
+            formData.append('_replyto', email);
+            fetch('https://formspree.io/f/xpzvgjzw', {
+                method: 'POST',
+                body: formData,
+                headers: { 'Accept': 'application/json' }
+            })
+            .then(response => {
+                if (response.ok) {
+                    console.log('Formspree email sent successfully');
+                } else {
+                    console.error('Formspree email failed');
+                }
+            })
+            .catch(error => {
+                console.error('Error sending email:', error);
+            });
+        }
+        function loadData() {
+            const savedClientTasks = localStorage.getItem('clientTasks');
+            const savedPersonalTasks = localStorage.getItem('personalTasks');
+            const savedSettings = localStorage.getItem('settings');
+            const savedNotifications = localStorage.getItem('notifications');
+            const savedMessages = localStorage.getItem('messages');
+            const savedTemplates = localStorage.getItem('taskTemplates');
+            if (savedClientTasks) clientTasks = JSON.parse(savedClientTasks);
+            if (savedPersonalTasks) personalTasks = JSON.parse(savedPersonalTasks);
+            if (savedSettings) {
+                settings = JSON.parse(savedSettings);
+                settings.notifications = settings.notifications || { overdue: true, upcoming: true, updates: true, payments: true };
+                settings.darkMode = settings.darkMode || false;
+                settings.sidebarCollapsed = settings.sidebarCollapsed || false;
+            }
+            if (savedNotifications) notifications = JSON.parse(savedNotifications);
+            if (savedMessages) messages = JSON.parse(savedMessages);
+            if (savedTemplates) taskTemplates = JSON.parse(savedTemplates);
+            if (settings.darkMode) {
+                document.body.classList.add('dark-mode');
+            }
+            if (settings.sidebarCollapsed && window.innerWidth > 768) {
+                document.getElementById('sidebar').classList.add('sidebar-collapsed');
+                document.getElementById('main-content').classList.add('ml-2');
+            }
+            checkMobileView();
+        }
+        function checkMobileView() {
+            if (window.innerWidth <= 768) {
+                document.getElementById('sidebar').classList.add('mobile-sidebar');
+                if (!document.getElementById('sidebar').classList.contains('mobile-open')) {
+                    document.getElementById('sidebar').classList.remove('sidebar-collapsed');
+                }
+            } else {
+                document.getElementById('sidebar').classList.remove('mobile-sidebar');
+                if (settings.sidebarCollapsed) {
+                    document.getElementById('sidebar').classList.add('sidebar-collapsed');
+                }
+            }
+        }
+        function saveData() {
+            localStorage.setItem('clientTasks', JSON.stringify(clientTasks));
+            localStorage.setItem('personalTasks', JSON.stringify(personalTasks));
+            localStorage.setItem('settings', JSON.stringify(settings));
+            localStorage.setItem('notifications', JSON.stringify(notifications));
+            localStorage.setItem('messages', JSON.stringify(messages));
+            localStorage.setItem('taskTemplates', JSON.stringify(taskTemplates));
+        }
+        function setupEventListeners() {
+            document.querySelectorAll('.nav-button').forEach(button => {
+                button.addEventListener('click', function() {
+                    setCurrentPage(this.getAttribute('data-page'));
+                });
+            });
+            document.getElementById('settings-button').addEventListener('click', showSettingsModal);
+            document.getElementById('notifications-button').addEventListener('click', function(e) {
+                e.stopPropagation();
+                const panel = document.getElementById('notifications-panel');
+                panel.classList.toggle('hidden');
+                renderNotifications();
+            });
+            document.getElementById('inbox-button').addEventListener('click', showInbox);
+            document.getElementById('close-inbox').addEventListener('click', hideInbox);
+            document.getElementById('dark-mode-toggle').addEventListener('click', toggleDarkMode);
+            document.getElementById('sidebar-toggle').addEventListener('click', toggleSidebar);
+            document.getElementById('clear-notifications').addEventListener('click', clearNotifications);
+            document.getElementById('mark-all-read').addEventListener('click', markAllNotificationsAsRead);
+            document.getElementById('save-task').addEventListener('click', saveTask);
+            document.getElementById('cancel-task').addEventListener('click', hideTaskModal);
+            document.getElementById('add-tag').addEventListener('click', addTag);
+            document.getElementById('tag-input').addEventListener('keypress', function(e) {
+                if (e.key === 'Enter') addTag();
+            });
+            document.getElementById('save-settings').addEventListener('click', saveSettings);
+            document.getElementById('cancel-settings').addEventListener('click', hideSettingsModal);
+            document.querySelectorAll('.theme-button').forEach(button => {
+                button.addEventListener('click', function() {
+                    selectTheme(this.getAttribute('data-theme'));
+                });
+            });
+            document.getElementById('logo-upload').addEventListener('change', handleLogoUpload);
+            document.getElementById('quick-add-button').addEventListener('click', showTaskTypeSelector);
+            document.querySelectorAll('.task-type-option').forEach(option => {
+                option.addEventListener('click', function() {
+                    const type = this.getAttribute('data-type');
+                    hideTaskTypeSelector();
+                    showTaskModal(type);
+                });
+            });
+            document.addEventListener('click', function(e) {
+                if (!e.target.closest('#task-type-selector') && !e.target.closest('#quick-add-button')) {
+                    hideTaskTypeSelector();
+                }
+            });
+            const amountPaidEl = document.getElementById('amount-paid');
+            const totalAmountEl = document.getElementById('total-amount');
+            const personalAmountPaidEl = document.getElementById('personal-amount-paid');
+            const personalTotalAmountEl = document.getElementById('personal-total-amount');
+            if (amountPaidEl) amountPaidEl.addEventListener('input', updateOutstandingAmount);
+            if (totalAmountEl) totalAmountEl.addEventListener('input', updateOutstandingAmount);
+            if (personalAmountPaidEl) personalAmountPaidEl.addEventListener('input', updatePersonalOutstandingAmount);
+            if (personalTotalAmountEl) personalTotalAmountEl.addEventListener('input', updatePersonalOutstandingAmount);
+            const personalPaymentToggle = document.getElementById('personal-payment-toggle');
+            if (personalPaymentToggle) {
+                personalPaymentToggle.addEventListener('change', function() {
+                    togglePersonalPaymentFields(this.checked);
+                });
+            }
+            document.addEventListener('click', function(e) {
+                if (!e.target.closest('#notifications-panel') && !e.target.closest('#notifications-button')) {
+                    document.getElementById('notifications-panel').classList.add('hidden');
+                }
+            });
+            const clientDetailsToggle = document.getElementById('client-details-dropdown-toggle');
+            if (clientDetailsToggle) {
+                clientDetailsToggle.addEventListener('click', toggleClientDetailsDropdown);
+            }
+            document.getElementById('export-data')?.addEventListener('click', exportDataToExcel);
+            document.getElementById('import-data')?.addEventListener('click', triggerImport);
+            document.getElementById('import-file')?.addEventListener('change', importDataFromExcel);
+            const personalTaskDropdown = document.getElementById('personal-task-dropdown');
+            if (personalTaskDropdown) {
+                personalTaskDropdown.addEventListener('change', function() {
+                    const taskId = parseInt(this.value);
+                    if (taskId) {
+                        const task = personalTasks.find(t => t.id === taskId);
+                        if (task) populatePersonalTaskForm(task);
+                    }
+                });
+            }
+            window.addEventListener('resize', checkMobileView);
+        }
+        function togglePersonalPaymentFields(show) {
+            const personalPaymentFields = document.getElementById('personal-payment-fields');
+            if (show) {
+                personalPaymentFields.classList.remove('hidden');
+            } else {
+                personalPaymentFields.classList.add('hidden');
+            }
+        }
+        function showTaskTypeSelector() {
+            document.getElementById('task-type-selector').classList.remove('hidden');
+        }
+        function hideTaskTypeSelector() {
+            document.getElementById('task-type-selector').classList.add('hidden');
+        }
+        function toggleClientDetailsDropdown() {
+            const dropdown = document.getElementById('client-details-dropdown');
+            const chevron = document.querySelector('.dropdown-chevron');
+            dropdown.classList.toggle('closed');
+            dropdown.classList.toggle('open');
+            chevron.classList.toggle('rotated');
+        }
+        function updateOutstandingAmount() {
+            const totalAmount = parseAmount(document.getElementById('total-amount')?.value || '');
+            const amountPaid = parseAmount(document.getElementById('amount-paid')?.value || '');
+            const outstandingValue = Math.max(0, totalAmount.value - amountPaid.value);
+            const outstandingAmount = formatAmount(totalAmount.currency, outstandingValue);
+            document.getElementById('outstanding-amount').value = outstandingAmount;
+        }
+        function updatePersonalOutstandingAmount() {
+            const totalAmount = parseAmount(document.getElementById('personal-total-amount')?.value || '');
+            const amountPaid = parseAmount(document.getElementById('personal-amount-paid')?.value || '');
+            const outstandingValue = Math.max(0, totalAmount.value - amountPaid.value);
+            const outstandingAmount = formatAmount(totalAmount.currency, outstandingValue);
+            document.getElementById('personal-outstanding-amount').value = outstandingAmount;
+        }
+        function toggleSidebar() {
+            const sidebar = document.getElementById('sidebar');
+            const mainContent = document.getElementById('main-content');
+            if (window.innerWidth <= 768) {
+                sidebar.classList.toggle('mobile-open');
+                return;
+            }
+            sidebar.classList.toggle('sidebar-collapsed');
+            if (sidebar.classList.contains('sidebar-collapsed')) {
+                mainContent.classList.add('ml-2');
+                settings.sidebarCollapsed = true;
+            } else {
+                mainContent.classList.remove('ml-2');
+                settings.sidebarCollapsed = false;
+            }
+            saveData();
+        }
+        function renderUI() {
+            updateHeader();
+            updateSidebar();
+            renderContent();
+            updateTheme();
+            updateQuickStats();
+            updateInboxBadge();
+        }
+        function updateHeader() {
+            const header = document.getElementById('header');
+            const welcomeText = document.getElementById('welcome-text');
+            const userLogo = document.getElementById('user-logo');
+            const darkModeButton = document.getElementById('dark-mode-toggle');
+            header.className = `bg-gradient-to-r ${themes[settings.theme]} text-white p-4 shadow-lg`;
+            welcomeText.textContent = `Welcome back, ${settings.userName}!`;
+            if (settings.logo) {
+                userLogo.src = settings.logo;
+                userLogo.classList.remove('hidden');
+            } else {
+                userLogo.classList.add('hidden');
+            }
+            if (settings.darkMode) {
+                darkModeButton.innerHTML = '<i data-lucide="sun" class="w-5 h-5"></i>';
+            } else {
+                darkModeButton.innerHTML = '<i data-lucide="moon" class="w-5 h-5"></i>';
+            }
+            lucide.createIcons();
+            const unreadCount = notifications.filter(n => !n.read).length;
+            const notificationCount = document.getElementById('notification-count');
+            if (unreadCount > 0) {
+                notificationCount.textContent = unreadCount;
+                notificationCount.classList.remove('hidden');
+            } else {
+                notificationCount.classList.add('hidden');
+            }
+        }
+        function updateSidebar() {
+            document.querySelectorAll('.nav-button').forEach(button => {
+                const page = button.getAttribute('data-page');
+                if (page === currentPage) {
+                    button.className = `nav-button w-full flex items-center gap-3 px-4 py-2.5 rounded-lg transition-colors bg-gradient-to-r ${themes[settings.theme]} text-white font-medium`;
+                } else {
+                    button.className = 'nav-button w-full flex items-center gap-3 px-4 py-2.5 rounded-lg transition-colors text-gray-700 hover:bg-gray-100 font-medium';
+                }
+            });
+        }
+        function updateQuickStats() {
+            const totalTasks = clientTasks.length + personalTasks.length;
+            const completedTasks = [...clientTasks, ...personalTasks].filter(t => t.status === 'Completed').length;
+            const overdueTasks = [...clientTasks, ...personalTasks].filter(t => 
+                t.dueDate && new Date(t.dueDate) < new Date() && t.status !== 'Completed'
+            ).length;
+            document.getElementById('stat-total').textContent = totalTasks;
+            document.getElementById('stat-completed').textContent = completedTasks;
+            document.getElementById('stat-overdue').textContent = overdueTasks;
+        }
+        function updateTheme() {
+            const header = document.getElementById('header');
+            header.className = `bg-gradient-to-r ${themes[settings.theme]} text-white p-4 shadow-lg`;
+            updateSidebar();
+        }
+        function toggleDarkMode() {
+            settings.darkMode = !settings.darkMode;
+            if (settings.darkMode) {
+                document.body.classList.add('dark-mode');
+                showToast('Dark mode enabled', 'success');
+            } else {
+                document.body.classList.remove('dark-mode');
+                showToast('Dark mode disabled', 'success');
+            }
+            saveData();
+            renderUI();
+        }
+        function renderContent() {
+            const mainContent = document.getElementById('main-content');
+            switch(currentPage) {
+                case 'dashboard': mainContent.innerHTML = renderDashboard(); break;
+                case 'client': mainContent.innerHTML = renderClientTasks(); break;
+                case 'personal': mainContent.innerHTML = renderPersonalTasks(); break;
+                case 'due-soon': mainContent.innerHTML = renderDueSoonPage(); break;
+                case 'kairo': mainContent.innerHTML = renderKairoBoard(); break;
+                case 'calendar': mainContent.innerHTML = renderCalendar(); break;
+                case 'analytics': mainContent.innerHTML = renderAnalytics(); break;
+                case 'about': mainContent.innerHTML = renderAboutKairo(); break;
+            }
+            attachDynamicEventListeners();
+            lucide.createIcons();
+        }
+        function setCurrentPage(page) {
+            currentPage = page;
+            if (page !== 'client') sortClientTasksByDueDate = false;
+            renderUI();
+        }
+        function showTaskModal(type, task = null, dueDate = null) {
+            taskType = type;
+            editingTask = task;
+            tags = task ? task.tags || [] : [];
+            const modal = document.getElementById('task-modal');
+            const title = document.getElementById('modal-title');
+            const clientField = document.getElementById('client-name-field');
+            const filesField = document.getElementById('files-field');
+            const paymentField = document.getElementById('payment-fields');
+            const personalFields = document.getElementById('personal-fields');
+            const personalPaymentFields = document.getElementById('personal-payment-fields');
+            const personalPaymentToggle = document.getElementById('personal-payment-toggle');
+            const projectLabel = document.getElementById('project-label');
+            const detailsDropdownToggle = document.getElementById('client-details-dropdown-toggle');
+            const detailsDropdown = document.getElementById('client-details-dropdown');
+            const dropdownToggleText = document.getElementById('dropdown-toggle-text');
+            const personalTaskDropdownContainer = document.getElementById('personal-task-dropdown-container');
+            const personalTaskDropdown = document.getElementById('personal-task-dropdown');
+            // Reset visibility for both types
+            clientField.classList.add('hidden');
+            filesField.classList.add('hidden');
+            paymentField.classList.add('hidden');
+            personalFields.classList.add('hidden');
+            personalPaymentFields.classList.add('hidden');
+            personalTaskDropdownContainer.classList.add('hidden');
+            detailsDropdownToggle.classList.add('hidden');
+            detailsDropdown.classList.remove('closed'); // Ensure it's open by default for adding
+            if (type === 'client') {
+                clientField.classList.remove('hidden');
+                filesField.classList.remove('hidden');
+                paymentField.classList.remove('hidden');
+                projectLabel.textContent = 'Project/Task Name';
+                if (editingTask) {
+                    detailsDropdownToggle.classList.remove('hidden');
+                    detailsDropdown.classList.add('closed');
+                    dropdownToggleText.textContent = `Total Amount: ${editingTask.totalAmount || '₦0'}`;
+                    const chevron = document.querySelector('.dropdown-chevron');
+                    chevron.classList.remove('rotated');
+                } else {
+                    detailsDropdownToggle.classList.add('hidden');
+                    detailsDropdown.classList.remove('closed');
+                }
+            } else {
+                // For Personal Tasks, set up the special edit view
+                personalFields.classList.remove('hidden');
+                projectLabel.textContent = 'Task Name';
+                if (editingTask) {
+                    // Show the dropdown toggle for personal task edit
+                    detailsDropdownToggle.classList.remove('hidden');
+                    detailsDropdown.classList.add('closed');
+                    // Set the text based on whether payment is enabled
+                    if (editingTask.totalAmount) {
+                        dropdownToggleText.textContent = `Total Amount: ${editingTask.totalAmount || '₦0'}`;
+                    } else {
+                        dropdownToggleText.textContent = 'Task Details';
+                    }
+                    const chevron = document.querySelector('.dropdown-chevron');
+                    chevron.classList.remove('rotated');
+                    // Pre-populate the payment toggle state
+                    personalPaymentToggle.checked = !!editingTask.totalAmount;
+                    // Show/hide payment fields based on toggle state
+                    if (editingTask.totalAmount) {
+                        personalPaymentFields.classList.remove('hidden');
+                    } else {
+                        personalPaymentFields.classList.add('hidden');
+                    }
+                    // Pre-populate the status and priority fields directly
+                    document.getElementById('status').value = editingTask.status || 'Not Started';
+                    document.getElementById('priority').value = editingTask.priority || 'Medium';
+                    // Populate payment fields if they exist
+                    if (editingTask.totalAmount) {
+                        document.getElementById('personal-total-amount').value = editingTask.totalAmount || '';
+                        document.getElementById('personal-outstanding-amount').value = editingTask.outstandingAmount || '';
+                        document.getElementById('personal-amount-paid').value = '';
+                        document.getElementById('personal-total-amount').readOnly = true;
+                    }
+                    // The rest of the form (name, description, category, etc.) will be inside the dropdown
+                    personalTaskDropdownContainer.classList.remove('hidden');
+                    populatePersonalTaskDropdown();
+                    personalTaskDropdown.value = editingTask.id;
+                } else {
+                    // For adding a new personal task, keep the dropdown toggle hidden and details open
+                    detailsDropdownToggle.classList.add('hidden');
+                    detailsDropdown.classList.remove('closed');
+                    personalTaskDropdownContainer.classList.add('hidden');
+                    personalPaymentToggle.checked = false;
+                    personalPaymentFields.classList.add('hidden');
+                }
+            }
+            title.textContent = `${editingTask ? 'Edit' : 'Add'} ${type === 'client' ? 'Client' : 'Personal'} Task`;
+            if (editingTask) {
+                document.getElementById('project-name').value = editingTask.projectName || '';
+                document.getElementById('description').value = editingTask.description || '';
+                document.getElementById('files').value = editingTask.files || '';
+                document.getElementById('start-date').value = editingTask.startDate || '';
+                document.getElementById('due-date').value = dueDate || editingTask.dueDate || '';
+                if (type === 'client') {
+                    document.getElementById('client-name').value = editingTask.clientName || '';
+                    document.getElementById('total-amount').value = editingTask.totalAmount || '';
+                    document.getElementById('outstanding-amount').value = editingTask.outstandingAmount || '';
+                    document.getElementById('amount-paid').value = '';
+                    document.getElementById('total-amount').readOnly = true;
+                } else {
+                    document.getElementById('task-category').value = editingTask.category || '';
+                    if (editingTask.totalAmount) {
+                        document.getElementById('personal-total-amount').value = editingTask.totalAmount || '';
+                        document.getElementById('personal-outstanding-amount').value = editingTask.outstandingAmount || '';
+                        document.getElementById('personal-amount-paid').value = '';
+                        document.getElementById('personal-total-amount').readOnly = true;
+                    }
+                }
+                renderTags();
+            } else {
+                document.getElementById('project-name').value = '';
+                document.getElementById('description').value = '';
+                document.getElementById('files').value = '';
+                document.getElementById('start-date').value = '';
+                document.getElementById('due-date').value = dueDate || '';
+                document.getElementById('status').value = 'Not Started';
+                document.getElementById('priority').value = 'Medium';
+                tags = [];
+                renderTags();
+                if (type === 'client') {
+                    document.getElementById('client-name').value = '';
+                    document.getElementById('total-amount').value = '';
+                    document.getElementById('outstanding-amount').value = '';
+                    document.getElementById('amount-paid').value = '';
+                    document.getElementById('total-amount').readOnly = false;
+                } else {
+                    document.getElementById('task-category').value = '';
+                    document.getElementById('personal-total-amount').value = '';
+                    document.getElementById('personal-outstanding-amount').value = '';
+                    document.getElementById('personal-amount-paid').value = '';
+                    document.getElementById('personal-total-amount').readOnly = false;
+                }
+            }
+            modal.classList.remove('hidden');
+            modal.classList.add('flex');
+        }
+        function populatePersonalTaskDropdown() {
+            const dropdown = document.getElementById('personal-task-dropdown');
+            dropdown.innerHTML = '<option value="">Select a task to edit</option>';
+            personalTasks.forEach(task => {
+                const option = document.createElement('option');
+                option.value = task.id;
+                option.textContent = task.projectName;
+                dropdown.appendChild(option);
+            });
+        }
+        function populatePersonalTaskForm(task) {
+            document.getElementById('project-name').value = task.projectName || '';
+            document.getElementById('description').value = task.description || '';
+            document.getElementById('start-date').value = task.startDate || '';
+            document.getElementById('due-date').value = task.dueDate || '';
+            document.getElementById('status').value = task.status || 'Not Started';
+            document.getElementById('priority').value = task.priority || 'Medium';
+            document.getElementById('task-category').value = task.category || '';
+            if (task.totalAmount) {
+                document.getElementById('personal-payment-toggle').checked = true;
+                document.getElementById('personal-total-amount').value = task.totalAmount || '';
+                document.getElementById('personal-outstanding-amount').value = task.outstandingAmount || '';
+                document.getElementById('personal-amount-paid').value = '';
+                document.getElementById('personal-payment-fields').classList.remove('hidden');
+                document.getElementById('personal-total-amount').readOnly = true;
+            } else {
+                document.getElementById('personal-payment-toggle').checked = false;
+                document.getElementById('personal-payment-fields').classList.add('hidden');
+            }
+            tags = task.tags || [];
+            renderTags();
+        }
+        function renderTags() {
+            const container = document.getElementById('tags-container');
+            container.innerHTML = '';
+            tags.forEach(tag => {
+                const tagElement = document.createElement('div');
+                tagElement.className = 'bg-blue-100 text-blue-800 px-2 py-1 rounded-full text-xs flex items-center';
+                tagElement.innerHTML = `
+                    ${tag}
+                    <button class="ml-1 text-blue-600 hover:text-blue-800" data-tag="${tag}">
+                        <i data-lucide="x" class="w-3 h-3"></i>
+                    </button>
+                `;
+                container.appendChild(tagElement);
+            });
+            container.querySelectorAll('button').forEach(button => {
+                button.addEventListener('click', function() {
+                    const tagToRemove = this.getAttribute('data-tag');
+                    tags = tags.filter(t => t !== tagToRemove);
+                    renderTags();
+                });
+            });
+            lucide.createIcons();
+        }
+        function addTag() {
+            const input = document.getElementById('tag-input');
+            const tag = input.value.trim();
+            if (tag && !tags.includes(tag)) {
+                tags.push(tag);
+                renderTags();
+                input.value = '';
+            }
+        }
+        function hideTaskModal() {
+            const modal = document.getElementById('task-modal');
+            modal.classList.add('hidden');
+            modal.classList.remove('flex');
+            editingTask = null;
+            tags = [];
+            selectedCalendarDate = null;
+        }
+        function parseAmount(amountStr) {
+            if (!amountStr) return { currency: '₦', value: 0 };
+            const currencyMatch = amountStr.match(/^[^\d\.]*/);
+            const currency = currencyMatch ? currencyMatch[0] : '₦';
+            const valueMatch = amountStr.match(/[\d\.]+/);
+            const value = valueMatch ? parseFloat(valueMatch[0]) : 0;
+            return { currency, value };
+        }
+        function formatAmount(currency, value) {
+            return `${currency}${value}`;
+        }
+        function calculatePaymentProgress(totalAmount, amountPaid) {
+            if (!totalAmount || totalAmount.value <= 0) return 0;
+            return Math.min(100, Math.round((amountPaid.value / totalAmount.value) * 100));
+        }
+        function calculateDaysBetween(task) {
+            if (!task.startDate || !task.dueDate) return null;
+            const start = new Date(task.startDate);
+            start.setHours(12, 0, 0, 0);
+            const due = new Date(task.dueDate);
+            due.setHours(12, 0, 0, 0);
+            let referenceDate = new Date();
+            if (task.status === 'Completed') {
+                if (task.clientName) {
+                    const paymentProgress = task.paymentProgress || 0;
+                    if (paymentProgress === 100) {
+                        referenceDate = task.completedAt ? new Date(task.completedAt) : due;
+                        if (referenceDate > due) referenceDate = due;
+                    }
+                } else {
+                    referenceDate = task.completedAt ? new Date(task.completedAt) : due;
+                    if (referenceDate > due) referenceDate = due;
+                }
+            }
+            referenceDate.setHours(12, 0, 0, 0);
+            const diffTime = due - start;
+            const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24)) + 1;
+            const remainingTime = due - referenceDate;
+            const remainingDays = Math.ceil(remainingTime / (1000 * 60 * 60 * 24));
+            return { totalDays: diffDays, remainingDays: remainingDays };
+        }
+        function updateTaskPriorityBasedOnDueDate(task) {
+            if (task.status === 'Completed') return task.priority;
+            if (!task.dueDate) return task.priority;
+            const dueDate = new Date(task.dueDate);
+            const today = new Date();
+            const diffTime = dueDate - today;
+            const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+            if (diffDays < 0) return 'Urgent';
+            else if (diffDays === 0) return 'Urgent';
+            else if (diffDays <= 2) return 'High';
+            return task.priority;
+        }
+        function urgencySort(tasks) {
+            const now = new Date();
+            return [...tasks].sort((a, b) => {
+                const aDue = a.dueDate ? new Date(a.dueDate) : null;
+                const bDue = b.dueDate ? new Date(b.dueDate) : null;
+                const aOverdue = aDue && aDue < now && a.status !== 'Completed';
+                const bOverdue = bDue && bDue < now && b.status !== 'Completed';
+                if (aOverdue && !bOverdue) return -1;
+                if (!aOverdue && bOverdue) return 1;
+                if (aOverdue && bOverdue) return aDue - bDue;
+                if (aDue && bDue) {
+                    const aDiff = Math.ceil((aDue - now) / (1000 * 60 * 60 * 24));
+                    const bDiff = Math.ceil((bDue - now) / (1000 * 60 * 60 * 24));
+                    const aSoon = aDiff >= 0 && aDiff <= 3;
+                    const bSoon = bDiff >= 0 && bDiff <= 3;
+                    if (aSoon && !bSoon) return -1;
+                    if (!aSoon && bSoon) return 1;
+                    if (aSoon && bSoon) return aDiff - bDiff;
+                }
+                if (aDue && bDue) {
+                    const timeDiff = aDue - bDue;
+                    if (timeDiff !== 0) return timeDiff;
+                }
+                return (b.createdAt || b.id) - (a.createdAt || a.id);
+            });
+        }
+        function saveTask() {
+            const formData = {
+                projectName: document.getElementById('project-name').value,
+                description: document.getElementById('description').value,
+                files: document.getElementById('files').value,
+                startDate: document.getElementById('start-date').value,
+                dueDate: document.getElementById('due-date').value,
+                status: document.getElementById('status').value,
+                priority: document.getElementById('priority').value,
+                tags: tags
+            };
+            const daysData = calculateDaysBetween({
+                ...formData,
+                clientName: taskType === 'client' ? document.getElementById('client-name').value : null,
+                paymentProgress: taskType === 'client' ? calculatePaymentProgress(
+                    parseAmount(document.getElementById('total-amount').value || ''),
+                    parseAmount(document.getElementById('amount-paid').value || '')
+                ) : 0
+            });
+            if (daysData) formData.days = daysData;
+            if (taskType === 'client') {
+                formData.clientName = document.getElementById('client-name').value;
+                const totalAmountStr = document.getElementById('total-amount').value;
+                const amountPaidStr = document.getElementById('amount-paid').value;
+                const totalAmount = parseAmount(totalAmountStr);
+                const amountPaid = parseAmount(amountPaidStr);
+                let outstandingAmount;
+                if (editingTask) {
+                    const previousOutstanding = parseAmount(editingTask.outstandingAmount || totalAmountStr);
+                    outstandingAmount = Math.max(0, previousOutstanding.value - amountPaid.value);
+                } else {
+                    outstandingAmount = Math.max(0, totalAmount.value - amountPaid.value);
+                }
+                formData.totalAmount = formatAmount(totalAmount.currency, totalAmount.value);
+                formData.outstandingAmount = formatAmount(totalAmount.currency, outstandingAmount);
+                formData.paymentProgress = calculatePaymentProgress(totalAmount, {value: totalAmount.value - outstandingAmount});
+                formData.currency = totalAmount.currency;
+                if (formData.status === 'Completed' && formData.paymentProgress === 100) {
+                    formData.completedAt = editingTask?.completedAt || new Date().toISOString();
+                } else if (editingTask && editingTask.completedAt) {
+                    formData.completedAt = null;
+                }
+            } else {
+                formData.category = document.getElementById('task-category').value;
+                const paymentEnabled = document.getElementById('personal-payment-toggle').checked;
+                if (paymentEnabled) {
+                    const totalAmountStr = document.getElementById('personal-total-amount').value;
+                    const amountPaidStr = document.getElementById('personal-amount-paid').value;
+                    const totalAmount = parseAmount(totalAmountStr);
+                    const amountPaid = parseAmount(amountPaidStr);
+                    let outstandingAmount;
+                    if (editingTask) {
+                        const previousOutstanding = parseAmount(editingTask.outstandingAmount || totalAmountStr);
+                        outstandingAmount = Math.max(0, previousOutstanding.value - amountPaid.value);
+                    } else {
+                        outstandingAmount = Math.max(0, totalAmount.value - amountPaid.value);
+                    }
+                    formData.totalAmount = formatAmount(totalAmount.currency, totalAmount.value);
+                    formData.outstandingAmount = formatAmount(totalAmount.currency, outstandingAmount);
+                    formData.paymentProgress = calculatePaymentProgress(totalAmount, {value: totalAmount.value - outstandingAmount});
+                    formData.currency = totalAmount.currency;
+                } else {
+                    formData.totalAmount = '';
+                    formData.outstandingAmount = '';
+                    formData.paymentProgress = 0;
+                }
+                if (formData.status === 'Completed') {
+                    formData.completedAt = editingTask?.completedAt || new Date().toISOString();
+                } else if (editingTask && editingTask.completedAt) {
+                    formData.completedAt = null;
+                }
+            }
+            formData.priority = updateTaskPriorityBasedOnDueDate({
+                ...formData,
+                dueDate: formData.dueDate,
+                status: formData.status
+            });
+            if (editingTask) {
+                const paymentChanged = (taskType === 'client' || document.getElementById('personal-payment-toggle').checked) && 
+                    (editingTask.totalAmount !== formData.totalAmount || 
+                     editingTask.outstandingAmount !== formData.outstandingAmount);
+                const updatedTask = {
+                    ...editingTask,
+                    ...formData,
+                    progress: getProgressFromStatus(formData.status)
+                };
+                if (taskType === 'client') {
+                    clientTasks = clientTasks.map(task => task.id === editingTask.id ? updatedTask : task);
+                } else {
+                    personalTasks = personalTasks.map(task => task.id === editingTask.id ? updatedTask : task);
+                }
+                if (paymentChanged && settings.notifications.payments) {
+                    addNotification('Payment Updated', `Payment for "${formData.projectName}" has been updated.`, 'info');
+                }
+                if (settings.notifications.updates) {
+                    addNotification('Task Updated', `Task "${formData.projectName}" has been updated.`, 'info');
+                }
+                showToast(`Task "${formData.projectName}" updated successfully`, 'success');
+            } else {
+                const newTask = {
+                    id: Date.now(),
+                    ...formData,
+                    progress: getProgressFromStatus(formData.status),
+                    createdAt: new Date().toISOString()
+                };
+                if (taskType === 'client') {
+                    clientTasks.push(newTask);
+                    if (settings.notifications.updates) {
+                        addNotification('New Client Task', `New client task "${formData.projectName}" has been created.`, 'info');
+                    }
+                } else {
+                    personalTasks.push(newTask);
+                    if (settings.notifications.updates) {
+                        addNotification('New Personal Task', `New personal task "${formData.projectName}" has been created.`, 'info');
+                    }
+                }
+                showToast(`Task "${formData.projectName}" created successfully`, 'success');
+            }
+            saveData();
+            hideTaskModal();
+            renderUI();
+            checkForNotifications();
+        }
+        function addNotification(title, message, type) {
+            const newNotification = {
+                id: Date.now(),
+                title,
+                message,
+                type,
+                date: new Date().toISOString(),
+                read: false
+            };
+            notifications.unshift(newNotification);
+            saveData();
+            renderUI();
+        }
+        function markAllNotificationsAsRead() {
+            notifications.forEach(notification => notification.read = true);
+            saveData();
+            renderNotifications();
+            renderUI();
+            showToast('All notifications marked as read', 'success');
+        }
+        function deleteTask(taskId, type) {
+            if (confirm('Are you sure you want to delete this task?')) {
+                let taskName = '';
+                if (type === 'client') {
+                    const task = clientTasks.find(t => t.id === taskId);
+                    taskName = task ? task.projectName : '';
+                    clientTasks = clientTasks.filter(task => task.id !== taskId);
+                } else {
+                    const task = personalTasks.find(t => t.id === taskId);
+                    taskName = task ? task.projectName : '';
+                    personalTasks = personalTasks.filter(task => task.id !== taskId);
+                }
+                saveData();
+                renderUI();
+                if (taskName) {
+                    showToast(`Task "${taskName}" deleted`, 'warning');
+                    if (settings.notifications.updates) {
+                        addNotification('Task Deleted', `Task "${taskName}" has been deleted.`, 'warning');
+                    }
+                }
+            }
+        }
+        function showSettingsModal() {
+            const modal = document.getElementById('settings-modal');
+            const userName = document.getElementById('user-name');
+            const logoPreview = document.getElementById('logo-preview');
+            const notifyOverdue = document.getElementById('notify-overdue');
+            const notifyUpcoming = document.getElementById('notify-upcoming');
+            const notifyUpdates = document.getElementById('notify-updates');
+            const notifyPayments = document.getElementById('notify-payments');
+            userName.value = settings.userName;
+            notifyOverdue.checked = settings.notifications.overdue;
+            notifyUpcoming.checked = settings.notifications.upcoming;
+            notifyUpdates.checked = settings.notifications.updates;
+            notifyPayments.checked = settings.notifications.payments;
+            if (settings.logo) {
+                logoPreview.src = settings.logo;
+                logoPreview.classList.remove('hidden');
+            } else {
+                logoPreview.classList.add('hidden');
+            }
+            document.querySelectorAll('.theme-button').forEach(button => {
+                if (button.getAttribute('data-theme') === settings.theme) {
+                    button.classList.add('ring-2', 'ring-gray-400');
+                } else {
+                    button.classList.remove('ring-2', 'ring-gray-400');
+                }
+            });
+            modal.classList.remove('hidden');
+            modal.classList.add('flex');
+        }
+        function hideSettingsModal() {
+            const modal = document.getElementById('settings-modal');
+            modal.classList.add('hidden');
+            modal.classList.remove('flex');
+        }
+        function saveSettings() {
+            const userName = document.getElementById('user-name').value;
+            const notifyOverdue = document.getElementById('notify-overdue').checked;
+            const notifyUpcoming = document.getElementById('notify-upcoming').checked;
+            const notifyUpdates = document.getElementById('notify-updates').checked;
+            const notifyPayments = document.getElementById('notify-payments').checked;
+            settings.userName = userName;
+            settings.notifications.overdue = notifyOverdue;
+            settings.notifications.upcoming = notifyUpcoming;
+            settings.notifications.updates = notifyUpdates;
+            settings.notifications.payments = notifyPayments;
+            saveData();
+            hideSettingsModal();
+            renderUI();
+            showToast('Settings saved successfully', 'success');
+        }
+        function selectTheme(theme) {
+            settings.theme = theme;
+            document.querySelectorAll('.theme-button').forEach(button => {
+                if (button.getAttribute('data-theme') === theme) {
+                    button.classList.add('ring-2', 'ring-gray-400');
+                } else {
+                    button.classList.remove('ring-2', 'ring-gray-400');
+                }
+            });
+        }
+        function handleLogoUpload(event) {
+            const file = event.target.files[0];
+            const logoPreview = document.getElementById('logo-preview');
+            if (file) {
+                const reader = new FileReader();
+                reader.onload = function(e) {
+                    settings.logo = e.target.result;
+                    logoPreview.src = e.target.result;
+                    logoPreview.classList.remove('hidden');
+                };
+                reader.readAsDataURL(file);
+            }
+        }
+        function getProgressFromStatus(status) {
+            const progressMap = {
+                'Not Started': 0,
+                'Started': 20,
+                'Processing': 50,
+                'Review': 80,
+                'Review Correction': 70,
+                'Completed': 100
+            };
+            return progressMap[status] || 0;
+        }
+        function getStatusColor(status) {
+            const colorMap = {
+                'Not Started': 'bg-gray-100 text-gray-800',
+                'Started': 'bg-blue-100 text-blue-800',
+                'Processing': 'bg-yellow-100 text-yellow-800',
+                'Review': 'bg-orange-100 text-orange-800',
+                'Review Correction': 'bg-red-100 text-red-800',
+                'Completed': 'bg-green-100 text-green-800'
+            };
+            return colorMap[status] || 'bg-gray-100 text-gray-800';
+        }
+        function showToast(message, type = 'info') {
+            const toast = document.createElement('div');
+            toast.className = `p-4 rounded-lg shadow-lg text-white flex items-center ${ 
+                type === 'success' ? 'bg-green-500' : 
+                type === 'warning' ? 'bg-yellow-500' : 
+                type === 'error' ? 'bg-red-500' : 'bg-blue-500'
+            }`;
+            const iconName = type === 'success' ? 'check-circle' : 
+                           type === 'warning' ? 'alert-circle' : 
+                           type === 'error' ? 'x-circle' : 'info';
+            toast.innerHTML = `
+                <i data-lucide="${iconName}" class="w-5 h-5 mr-2"></i>
+                <span>${message}</span>
+            `;
+            const container = document.getElementById('toast-container');
+            container.appendChild(toast);
+            lucide.createIcons();
+            setTimeout(() => toast.remove(), 3000);
+        }
+        function renderNotifications() {
+            const container = document.getElementById('notifications-list');
+            container.innerHTML = '';
+            if (notifications.length === 0) {
+                container.innerHTML = '<p class="text-center text-gray-500 py-4">No notifications</p>';
+                return;
+            }
+            notifications.forEach(notification => {
+                const notificationElement = document.createElement('div');
+                notificationElement.className = `p-3 border-b border-gray-200 notification-item ${ 
+                    notification.type === 'success' ? 'notification-success' : 
+                    notification.type === 'warning' ? 'notification-warning' : 
+                    notification.type === 'error' ? 'notification-error' : 'notification-info'
+                } ${notification.read ? '' : 'bg-blue-50'}`;
+                notificationElement.innerHTML = `
+                    <div class="flex justify-between items-start">
+                        <div class="flex-1">
+                            <p class="font-medium ${notification.read ? '' : 'text-blue-700'}">${notification.title}</p>
+                            <p class="text-sm text-gray-600 mt-1">${notification.message}</p>
+                            <p class="text-xs text-gray-500 mt-2">${new Date(notification.date).toLocaleString()}</p>
+                        </div>
+                        <button class="ml-2 text-gray-400 hover:text-gray-600 mark-as-read" data-id="${notification.id}">
+                            <i data-lucide="${notification.read ? 'check-circle' : 'circle'}" class="w-4 h-4"></i>
+                        </button>
+                    </div>
+                `;
+                container.appendChild(notificationElement);
+            });
+            container.querySelectorAll('.mark-as-read').forEach(button => {
+                button.addEventListener('click', function() {
+                    const id = parseInt(this.getAttribute('data-id'));
+                    const notification = notifications.find(n => n.id === id);
+                    if (notification) {
+                        notification.read = !notification.read;
+                        saveData();
+                        renderNotifications();
+                        renderUI();
+                    }
+                });
+            });
+            lucide.createIcons();
+        }
+        function clearNotifications() {
+            notifications = []; // Empty the array
+            saveData(); // Persist empty array to localStorage
+            renderNotifications();
+            renderUI();
+            showToast('All notifications cleared', 'success');
+        }
+        function checkForNotifications() {
+            if (!settings.notifications.overdue && !settings.notifications.upcoming) return;
+            const allTasks = [...clientTasks, ...personalTasks];
+            const today = new Date();
+            allTasks.forEach(task => {
+                if (task.dueDate) {
+                    const dueDate = new Date(task.dueDate);
+                    const diffTime = dueDate - today;
+                    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+                    if (diffDays < 0 && task.status !== 'Completed' && settings.notifications.overdue) {
+                        const existingNotification = notifications.find(n => 
+                            n.message.includes(task.projectName) && n.title === 'Task Overdue'
+                        );
+                        if (!existingNotification) {
+                            addNotification('Task Overdue', `Task "${task.projectName}" is overdue by ${Math.abs(diffDays)} days.`, 'warning');
+                        }
+                    }
+                    if (diffDays >= 0 && diffDays <= 3 && task.status !== 'Completed' && settings.notifications.upcoming) {
+                        const existingNotification = notifications.find(n => 
+                            n.message.includes(task.projectName) && n.title === 'Task Due Soon'
+                        );
+                        if (!existingNotification) {
+                            addNotification('Task Due Soon', `Task "${task.projectName}" is due in ${diffDays} days.`, 'info');
+                        }
+                    }
+                }
+            });
+            saveData();
+            renderUI();
+        }
+        function calculateClientFinancialOverview() {
+            const clientTasksWithPayment = clientTasks.filter(t => t.totalAmount);
+            const totalRevenue = clientTasksWithPayment.reduce((sum, task) => {
+                const amount = parseAmount(task.totalAmount);
+                return sum + amount.value;
+            }, 0);
+            const totalPaid = clientTasksWithPayment.reduce((sum, task) => {
+                const totalAmount = parseAmount(task.totalAmount);
+                const outstandingAmount = parseAmount(task.outstandingAmount || '');
+                return sum + (totalAmount.value - outstandingAmount.value);
+            }, 0);
+            const totalOutstanding = totalRevenue - totalPaid;
+            return { totalRevenue, totalPaid, totalOutstanding };
+        }
+        function calculatePersonalFinancialOverview() {
+            const personalTasksWithPayment = personalTasks.filter(t => t.totalAmount);
+            const totalAmount = personalTasksWithPayment.reduce((sum, task) => {
+                const amount = parseAmount(task.totalAmount);
+                return sum + amount.value;
+            }, 0);
+            const totalPaid = personalTasksWithPayment.reduce((sum, task) => {
+                const totalAmount = parseAmount(task.totalAmount);
+                const outstandingAmount = parseAmount(task.outstandingAmount || '');
+                return sum + (totalAmount.value - outstandingAmount.value);
+            }, 0);
+            const totalOutstanding = totalAmount - totalPaid;
+            return { totalAmount, totalPaid, totalOutstanding };
+        }
+        function renderDashboard() {
+            const totalTasks = clientTasks.length + personalTasks.length;
+            const completedTasks = [...clientTasks, ...personalTasks].filter(t => t.status === 'Completed').length;
+            const overdueTasks = [...clientTasks, ...personalTasks].filter(t => 
+                t.dueDate && new Date(t.dueDate) < new Date() && t.status !== 'Completed'
+            ).length;
+            const dueSoonTasks = urgencySort([...clientTasks, ...personalTasks].filter(t => t.status !== 'Completed'));
+            const recentClientTasks = [...clientTasks].sort((a, b) => new Date(b.createdAt || b.id) - new Date(a.createdAt || a.id)).slice(0, 3);
+            const recentPersonalTasks = [...personalTasks].sort((a, b) => new Date(b.createdAt || b.id) - new Date(a.createdAt || a.id)).slice(0, 3);
+            return `
+                <div class="space-y-6">
+                    <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                        <div class="card bg-white rounded-xl p-6 shadow-sm border border-gray-200">
+                            <div class="flex items-center justify-between">
+                                <div>
+                                    <p class="text-sm text-gray-600 font-medium">Total Tasks</p>
+                                    <p class="text-2xl font-bold text-gray-900 mt-1">${totalTasks}</p>
+                                </div>
+                                <div class="p-3 rounded-lg bg-gradient-to-r ${themes[settings.theme]}">
+                                    <i data-lucide="briefcase" class="text-white w-6 h-6"></i>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="card bg-white rounded-xl p-6 shadow-sm border border-gray-200">
+                            <div class="flex items-center justify-between">
+                                <div>
+                                    <p class="text-sm text-gray-600 font-medium">Completed</p>
+                                    <p class="text-2xl font-bold text-green-600 mt-1">${completedTasks}</p>
+                                </div>
+                                <div class="p-3 rounded-lg bg-green-100">
+                                    <i data-lucide="check-circle" class="text-green-600 w-6 h-6"></i>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="card bg-white rounded-xl p-6 shadow-sm border border-gray-200">
+                            <div class="flex items-center justify-between">
+                                <div>
+                                    <p class="text-sm text-gray-600 font-medium">Overdue</p>
+                                    <p class="text-2xl font-bold text-red-600 mt-1">${overdueTasks}</p>
+                                </div>
+                                <div class="p-3 rounded-lg bg-red-100">
+                                    <i data-lucide="clock" class="text-red-600 w-6 h-6"></i>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                        <div class="card bg-white rounded-xl p-6 shadow-sm border border-gray-200">
+                            <div class="flex justify-between items-center mb-4">
+                                <h3 class="text-lg font-semibold">Recent Client Tasks</h3>
+                                <button data-page="client" class="view-all-button text-sm text-blue-600 hover:text-blue-700 font-medium">
+                                    View all
+                                </button>
+                            </div>
+                            <div class="space-y-3">
+                                ${recentClientTasks.map(task => renderTaskCard(task, 'client')).join('')}
+                                ${clientTasks.length === 0 ? '<p class="text-gray-500 text-center py-8">No client tasks yet</p>' : ''}
+                            </div>
+                        </div>
+                        <div class="card bg-white rounded-xl p-6 shadow-sm border border-gray-200">
+                            <div class="flex justify-between items-center mb-4">
+                                <h3 class="text-lg font-semibold">Recent Personal Tasks</h3>
+                                <button data-page="personal" class="view-all-button text-sm text-blue-600 hover:text-blue-700 font-medium">
+                                    View all
+                                </button>
+                            </div>
+                            <div class="space-y-3">
+                                ${recentPersonalTasks.map(task => renderTaskCard(task, 'personal')).join('')}
+                                ${personalTasks.length === 0 ? '<p class="text-gray-500 text-center py-8">No personal tasks yet</p>' : ''}
+                            </div>
+                        </div>
+                    </div>
+                    ${dueSoonTasks.length > 0 ? `
+                        <div class="card bg-white rounded-xl p-6 shadow-sm border border-gray-200">
+                            <div class="flex justify-between items-center mb-4">
+                                <h3 class="text-lg font-semibold">Task Due & Soon</h3>
+                                <button id="view-all-due-tasks" class="text-sm text-blue-600 hover:text-blue-700 font-medium">
+                                    View all
+                                </button>
+                            </div>
+                            <div class="space-y-3">
+                                ${dueSoonTasks.slice(0, 5).map(task => renderTaskCard(task, task.clientName ? 'client' : 'personal')).join('')}
+                            </div>
+                        </div>
+                    ` : ''}
+                </div>
+            `;
+        }
+        function renderClientTasks() {
+            const recentClientTasks = [...clientTasks].sort((a, b) => new Date(b.createdAt || b.id) - new Date(a.createdAt || a.id));
+            return `
+                <div class="space-y-6">
+                    <div class="flex justify-between items-center flex-col md:flex-row gap-4 md:gap-0">
+                        <h2 class="text-2xl font-bold text-gray-900">Client Tasks</h2>
+                        <button id="add-client-task" class="flex items-center gap-2 px-4 py-2.5 rounded-lg text-white bg-gradient-to-r ${themes[settings.theme]} hover:opacity-90 transition-opacity font-medium">
+                            <i data-lucide="plus" class="w-5 h-5"></i>
+                            Add Client Task
+                        </button>
+                    </div>
+                    ${recentClientTasks.length > 0 ? `
+                        <div class="flex flex-wrap gap-2 mb-4">
+                            <input type="text" id="search-input" placeholder="Search tasks..." class="flex-1 p-2.5 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent">
+                            <select id="status-filter" class="p-2.5 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent">
+                                <option value="">All Statuses</option>
+                                ${statusOptions.map(status => `<option value="${status}">${status}</option>`).join('')}
+                            </select>
+                            <select id="priority-filter" class="p-2.5 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent">
+                                <option value="">All Priorities</option>
+                                <option value="Low">Low</option>
+                                <option value="Medium">Medium</option>
+                                <option value="High">High</option>
+                                <option value="Urgent">Urgent</option>
+                            </select>
+                        </div>
+                    ` : ''}
+                    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4" id="tasks-container">
+                        ${recentClientTasks.map(task => renderTaskCard(task, 'client')).join('')}
+                    </div>
+                    ${recentClientTasks.length === 0 ? `
+                        <div class="text-center py-12">
+                            <i data-lucide="briefcase" class="mx-auto text-gray-400 w-12 h-12 mb-4"></i>
+                            <p class="text-gray-500 mb-4">No client tasks yet</p>
+                            <button id="add-first-client-task" class="px-4 py-2.5 rounded-lg text-white bg-gradient-to-r ${themes[settings.theme]} hover:opacity-90 transition-opacity font-medium">
+                                Add Your First Client Task
+                            </button>
+                        </div>
+                    ` : ''}
+                </div>
+            `;
+        }
+        function renderPersonalTasks() {
+            const recentPersonalTasks = [...personalTasks].sort((a, b) => new Date(b.createdAt || b.id) - new Date(a.createdAt || a.id));
+            return `
+                <div class="space-y-6">
+                    <div class="flex justify-between items-center flex-col md:flex-row gap-4 md:gap-0">
+                        <h2 class="text-2xl font-bold text-gray-900">Personal Tasks</h2>
+                        <button id="add-personal-task" class="flex items-center gap-2 px-4 py-2.5 rounded-lg text-white bg-gradient-to-r ${themes[settings.theme]} hover:opacity-90 transition-opacity font-medium">
+                            <i data-lucide="plus" class="w-5 h-5"></i>
+                            Add Personal Task
+                        </button>
+                    </div>
+                    ${recentPersonalTasks.length > 0 ? `
+                        <div class="flex flex-wrap gap-2 mb-4">
+                            <input type="text" id="search-input" placeholder="Search tasks..." class="flex-1 p-2.5 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent">
+                            <select id="status-filter" class="p-2.5 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent">
+                                <option value="">All Statuses</option>
+                                ${statusOptions.map(status => `<option value="${status}">${status}</option>`).join('')}
+                            </select>
+                            <select id="priority-filter" class="p-2.5 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent">
+                                <option value="">All Priorities</option>
+                                <option value="Low">Low</option>
+                                <option value="Medium">Medium</option>
+                                <option value="High">High</option>
+                                <option value="Urgent">Urgent</option>
+                            </select>
+                        </div>
+                    ` : ''}
+                    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4" id="tasks-container">
+                        ${recentPersonalTasks.map(task => renderTaskCard(task, 'personal')).join('')}
+                    </div>
+                    ${recentPersonalTasks.length === 0 ? `
+                        <div class="text-center py-12">
+                            <i data-lucide="user" class="mx-auto text-gray-400 w-12 h-12 mb-4"></i>
+                            <p class="text-gray-500 mb-4">No personal tasks yet</p>
+                            <button id="add-first-personal-task" class="px-4 py-2.5 rounded-lg text-white bg-gradient-to-r ${themes[settings.theme]} hover:opacity-90 transition-opacity font-medium">
+                                Add Your First Personal Task
+                            </button>
+                        </div>
+                    ` : ''}
+                </div>
+            `;
+        }
+        function renderDueSoonPage() {
+            const allClientTasks = clientTasks.filter(t => t.status !== 'Completed');
+            const allPersonalTasks = personalTasks.filter(t => t.status !== 'Completed');
+            const sortedClient = urgencySort(allClientTasks);
+            const sortedPersonal = urgencySort(allPersonalTasks);
+            return `
+                <div class="space-y-6">
+                    <h2 class="text-2xl font-bold text-gray-900">Task Due & Soon</h2>
+                    <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                        <div class="card bg-white rounded-xl p-6 shadow-sm border border-gray-200">
+                            <h3 class="text-lg font-semibold mb-4">Client Tasks</h3>
+                            <div class="space-y-3">
+                                ${sortedClient.length > 0 
+                                    ? sortedClient.map(task => renderTaskCard(task, 'client')).join('') 
+                                    : '<p class="text-gray-500 text-center py-8">No active client tasks</p>'
+                                }
+                            </div>
+                        </div>
+                        <div class="card bg-white rounded-xl p-6 shadow-sm border border-gray-200">
+                            <h3 class="text-lg font-semibold mb-4">Personal Tasks</h3>
+                            <div class="space-y-3">
+                                ${sortedPersonal.length > 0 
+                                    ? sortedPersonal.map(task => renderTaskCard(task, 'personal')).join('') 
+                                    : '<p class="text-gray-500 text-center py-8">No active personal tasks</p>'
+                                }
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            `;
+        }
+        function renderKairoBoard() {
+            const allTasks = [...clientTasks, ...personalTasks];
+            return `
+                <div class="space-y-6">
+                    <div class="flex justify-between items-center flex-col md:flex-row gap-4 md:gap-0">
+                        <h2 class="text-2xl font-bold text-gray-900">Kairo Board</h2>
+                        <button id="add-task-kairo" class="flex items-center gap-2 px-4 py-2.5 rounded-lg text-white bg-gradient-to-r ${themes[settings.theme]} hover:opacity-90 transition-opacity font-medium">
+                            <i data-lucide="plus" class="w-5 h-5"></i>
+                            Add Task
+                        </button>
+                    </div>
+                    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                        ${statusOptions.map(status => {
+                            const statusTasks = allTasks.filter(task => task.status === status);
+                            return `
+                                <div class="kairo-column bg-gray-100 rounded-lg p-4">
+                                    <h3 class="font-semibold mb-4 flex items-center justify-between">
+                                        <span>${status}</span>
+                                        <span class="bg-gray-200 text-gray-700 rounded-full px-2 py-1 text-xs">${statusTasks.length}</span>
+                                    </h3>
+                                    <div class="space-y-3">
+                                        ${statusTasks.map(task => renderKairoTask(task)).join('')}
+                                        ${statusTasks.length === 0 ? '<p class="text-gray-500 text-center py-4">No tasks</p>' : ''}
+                                    </div>
+                                </div>
+                            `;
+                        }).join('')}
+                    </div>
+                </div>
+            `;
+        }
+        function renderCalendar() {
+            const firstDay = new Date(calendarDate.getFullYear(), calendarDate.getMonth(), 1);
+            const lastDay = new Date(calendarDate.getFullYear(), calendarDate.getMonth() + 1, 0);
+            const daysInMonth = lastDay.getDate();
+            const startingDay = firstDay.getDay();
+            const allTasks = [...clientTasks, ...personalTasks].filter(task => task.dueDate);
+            let calendarHTML = `
+                <div class="space-y-6">
+                    <div class="calendar-nav flex-col md:flex-row">
+                        <button id="calendar-prev" class="p-2.5 rounded-lg bg-gray-200 hover:bg-gray-300 transition-colors order-2 md:order-1">
+                            <i data-lucide="chevron-left" class="w-5 h-5"></i>
+                        </button>
+                        <h2 class="text-2xl font-bold text-gray-900 order-1 md:order-2 mb-4 md:mb-0">${calendarDate.toLocaleString('default', { month: 'long', year: 'numeric' })}</h2>
+                        <button id="calendar-next" class="p-2.5 rounded-lg bg-gray-200 hover:bg-gray-300 transition-colors order-3">
+                            <i data-lucide="chevron-right" class="w-5 h-5"></i>
+                        </button>
+                    </div>
+                    <div class="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+                        <div class="grid grid-cols-7 bg-gray-100">
+                            ${['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map(day => `
+                                <div class="p-3 text-center font-semibold text-xs md:text-sm">${day}</div>
+                            `).join('')}
+                        </div>
+                        <div class="grid grid-cols-7">
+            `;
+            for (let i = 0; i < startingDay; i++) {
+                calendarHTML += `<div class="p-3 border border-gray-200 min-h-20"></div>`;
+            }
+            for (let day = 1; day <= daysInMonth; day++) {
+                const dateStr = `${calendarDate.getFullYear()}-${String(calendarDate.getMonth() + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+                const dayTasks = allTasks.filter(task => task.dueDate.startsWith(dateStr));
+                const hasTasks = dayTasks.length > 0;
+                const isToday = day === new Date().getDate() && calendarDate.getMonth() === new Date().getMonth() && calendarDate.getFullYear() === new Date().getFullYear();
+                calendarHTML += `
+                    <div class="p-2 border border-gray-200 min-h-20 calendar-day ${hasTasks ? 'has-tasks' : ''} ${isToday ? 'bg-blue-100' : ''}" data-date="${dateStr}">
+                        <div class="flex justify-between items-start">
+                            <span class="text-sm font-medium ${isToday ? 'text-blue-600' : ''}">${day}</span>
+                            ${hasTasks ? `<span class="bg-blue-100 text-blue-800 rounded-full px-2 text-xs">${dayTasks.length}</span>` : ''}
+                        </div>
+                        ${hasTasks ? `
+                            <div class="mt-2 space-y-1">
+                                ${dayTasks.slice(0, 2).map(task => `
+                                    <div class="text-xs p-1 bg-gray-100 rounded truncate" title="${task.projectName}">${task.projectName}</div>
+                                `).join('')}
+                                ${dayTasks.length > 2 ? `<div class="text-xs text-gray-500 text-center">+${dayTasks.length - 2} more</div>` : ''}
+                            </div>
+                        ` : ''}
+                    </div>
+                `;
+            }
+            calendarHTML += `
+                        </div>
+                    </div>
+                </div>
+            `;
+            return calendarHTML;
+        }
+        function renderAnalytics() {
+            const allTasks = [...clientTasks, ...personalTasks];
+            const completedTasks = allTasks.filter(t => t.status === 'Completed').length;
+            const inProgressTasks = allTasks.filter(t => t.status !== 'Completed' && t.status !== 'Not Started').length;
+            const notStartedTasks = allTasks.filter(t => t.status === 'Not Started').length;
+            const clientFinancialData = calculateClientFinancialOverview();
+            const personalFinancialData = calculatePersonalFinancialOverview();
+            const priorityCounts = {
+                Low: allTasks.filter(t => t.priority === 'Low').length,
+                Medium: allTasks.filter(t => t.priority === 'Medium').length,
+                High: allTasks.filter(t => t.priority === 'High').length,
+                Urgent: allTasks.filter(t => t.priority === 'Urgent').length
+            };
+            let clientVisible = localStorage.getItem('clientFinancialVisible') !== 'false';
+            let personalVisible = localStorage.getItem('personalFinancialVisible') !== 'false';
+            const clientRevenue = clientVisible ? formatAmount('₦', clientFinancialData.totalRevenue) : '***';
+            const clientPaid = clientVisible ? formatAmount('₦', clientFinancialData.totalPaid) : '***';
+            const clientOutstanding = clientVisible ? formatAmount('₦', clientFinancialData.totalOutstanding) : '***';
+            const personalAmount = personalVisible ? formatAmount('₦', personalFinancialData.totalAmount) : '***';
+            const personalPaid = personalVisible ? formatAmount('₦', personalFinancialData.totalPaid) : '***';
+            const personalOutstanding = personalVisible ? formatAmount('₦', personalFinancialData.totalOutstanding) : '***';
+            return `
+                <div class="space-y-6">
+                    <h2 class="text-2xl font-bold text-gray-900">Task Analytics</h2>
+                    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                        <div class="card bg-white rounded-xl p-6 shadow-sm border border-gray-200">
+                            <div class="flex items-center justify-between">
+                                <div>
+                                    <p class="text-sm text-gray-600 font-medium">Total Tasks</p>
+                                    <p class="text-2xl font-bold text-gray-900 mt-1">${allTasks.length}</p>
+                                </div>
+                                <div class="p-3 rounded-lg bg-gradient-to-r ${themes[settings.theme]}">
+                                    <i data-lucide="briefcase" class="text-white w-6 h-6"></i>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="card bg-white rounded-xl p-6 shadow-sm border border-gray-200">
+                            <div class="flex items-center justify-between">
+                                <div>
+                                    <p class="text-sm text-gray-600 font-medium">Completed</p>
+                                    <p class="text-2xl font-bold text-green-600 mt-1">${completedTasks}</p>
+                                </div>
+                                <div class="p-3 rounded-lg bg-green-100">
+                                    <i data-lucide="check-circle" class="text-green-600 w-6 h-6"></i>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="card bg-white rounded-xl p-6 shadow-sm border border-gray-200">
+                            <div class="flex items-center justify-between">
+                                <div>
+                                    <p class="text-sm text-gray-600 font-medium">In Progress</p>
+                                    <p class="text-2xl font-bold text-blue-600 mt-1">${inProgressTasks}</p>
+                                </div>
+                                <div class="p-3 rounded-lg bg-blue-100">
+                                    <i data-lucide="refresh-cw" class="text-blue-600 w-6 h-6"></i>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="card bg-white rounded-xl p-6 shadow-sm border border-gray-200">
+                            <div class="flex items-center justify-between">
+                                <div>
+                                    <p class="text-sm text-gray-600 font-medium">Not Started</p>
+                                    <p class="text-2xl font-bold text-gray-600 mt-1">${notStartedTasks}</p>
+                                </div>
+                                <div class="p-3 rounded-lg bg-gray-100">
+                                    <i data-lucide="clock" class="text-gray-600 w-6 h-6"></i>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                        <div class="card bg-white rounded-xl p-6 shadow-sm border border-gray-200">
+                            <div class="flex justify-between items-center mb-4">
+                                <h3 class="text-lg font-semibold">Client Financial Overview</h3>
+                                <button id="toggle-client-financial" class="text-gray-500 hover:text-gray-700">
+                                    <i data-lucide="${clientVisible ? 'eye' : 'eye-off'}" class="w-5 h-5"></i>
+                                </button>
+                            </div>
+                            <div class="space-y-4">
+                                <div>
+                                    <p class="text-sm text-gray-600">Total Revenue</p>
+                                    <p class="text-2xl font-bold text-gray-900 ${clientVisible ? '' : 'hidden-amount'}">${clientRevenue}</p>
+                                </div>
+                                <div>
+                                    <p class="text-sm text-gray-600">Total Paid</p>
+                                    <p class="text-2xl font-bold text-green-600 ${clientVisible ? '' : 'hidden-amount'}">${clientPaid}</p>
+                                </div>
+                                <div>
+                                    <p class="text-sm text-gray-600">Total Outstanding</p>
+                                    <p class="text-2xl font-bold text-red-600 ${clientVisible ? '' : 'hidden-amount'}">${clientOutstanding}</p>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="card bg-white rounded-xl p-6 shadow-sm border border-gray-200">
+                            <div class="flex justify-between items-center mb-4">
+                                <h3 class="text-lg font-semibold">Personal Financial Overview</h3>
+                                <button id="toggle-personal-financial" class="text-gray-500 hover:text-gray-700">
+                                    <i data-lucide="${personalVisible ? 'eye' : 'eye-off'}" class="w-5 h-5"></i>
+                                </button>
+                            </div>
+                            <div class="space-y-4">
+                                <div>
+                                    <p class="text-sm text-gray-600">Total Amount</p>
+                                    <p class="text-2xl font-bold text-gray-900 ${personalVisible ? '' : 'hidden-amount'}">${personalAmount}</p>
+                                </div>
+                                <div>
+                                    <p class="text-sm text-gray-600">Total Paid</p>
+                                    <p class="text-2xl font-bold text-green-600 ${personalVisible ? '' : 'hidden-amount'}">${personalPaid}</p>
+                                </div>
+                                <div>
+                                    <p class="text-sm text-gray-600">Total Outstanding</p>
+                                    <p class="text-2xl font-bold text-red-600 ${personalVisible ? '' : 'hidden-amount'}">${personalOutstanding}</p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="card bg-white rounded-xl p-6 shadow-sm border border-gray-200">
+                        <h3 class="text-lg font-semibold mb-4">Priority Distribution</h3>
+                        <div class="space-y-3">
+                            <div>
+                                <div class="flex justify-between mb-1">
+                                    <span class="text-sm font-medium">Urgent</span>
+                                    <span class="text-sm font-medium">${priorityCounts.Urgent}</span>
+                                </div>
+                                <div class="w-full bg-gray-200 rounded-full h-2">
+                                    <div class="bg-red-600 h-2 rounded-full" style="width: ${allTasks.length ? (priorityCounts.Urgent / allTasks.length) * 100 : 0}%"></div>
+                                </div>
+                            </div>
+                            <div>
+                                <div class="flex justify-between mb-1">
+                                    <span class="text-sm font-medium">High</span>
+                                    <span class="text-sm font-medium">${priorityCounts.High}</span>
+                                </div>
+                                <div class="w-full bg-gray-200 rounded-full h-2">
+                                    <div class="bg-orange-500 h-2 rounded-full" style="width: ${allTasks.length ? (priorityCounts.High / allTasks.length) * 100 : 0}%"></div>
+                                </div>
+                            </div>
+                            <div>
+                                <div class="flex justify-between mb-1">
+                                    <span class="text-sm font-medium">Medium</span>
+                                    <span class="text-sm font-medium">${priorityCounts.Medium}</span>
+                                </div>
+                                <div class="w-full bg-gray-200 rounded-full h-2">
+                                    <div class="bg-yellow-500 h-2 rounded-full" style="width: ${allTasks.length ? (priorityCounts.Medium / allTasks.length) * 100 : 0}%"></div>
+                                </div>
+                            </div>
+                            <div>
+                                <div class="flex justify-between mb-1">
+                                    <span class="text-sm font-medium">Low</span>
+                                    <span class="text-sm font-medium">${priorityCounts.Low}</span>
+                                </div>
+                                <div class="w-full bg-gray-200 rounded-full h-2">
+                                    <div class="bg-green-500 h-2 rounded-full" style="width: ${allTasks.length ? (priorityCounts.Low / allTasks.length) * 100 : 0}%"></div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            `;
+        }
+        function renderAboutKairo() {
+            return `
+                <div class="space-y-8">
+                    <div class="text-center">
+                        <h1 class="text-3xl font-bold text-gray-900 mb-2">About Kairo</h1>
+                        <p class="text-gray-600 max-w-3xl mx-auto">
+                            Kairo is a user-focused task management platform from Biznetic AI that helps individuals, SMEs and large organisations manage work more efficiently. It blends a clean interface with productivity tools and optional AI automation so teams spend less time on admin and more on outcomes.
+                        </p>
+                    </div>
+                    <div class="about-section">
+                        <h2 class="text-2xl font-bold text-gray-900 mb-4">What we do</h2>
+                        <p class="text-gray-700 mb-4">
+                            Kairo centralises tasks, projects and deadlines in one workspace — ideal for solo entrepreneurs, small teams or enterprises. Plan, prioritise, track progress and meet deadlines with confidence.
+                        </p>
+                    </div>
+                    <div class="about-section">
+                        <h2 class="text-2xl font-bold text-gray-900 mb-4">Key benefits</h2>
+                        <div class="space-y-4">
+                            <div class="benefit-item">
+                                <div class="benefit-icon">
+                                    <i data-lucide="zap" class="text-blue-600 w-5 h-5"></i>
+                                </div>
+                                <div>
+                                    <h3 class="font-semibold text-gray-900">Faster planning</h3>
+                                    <p class="text-gray-600">Create projects, subtasks and deadlines quickly.</p>
+                                </div>
+                            </div>
+                            <div class="benefit-item">
+                                <div class="benefit-icon">
+                                    <i data-lucide="users" class="text-blue-600 w-5 h-5"></i>
+                                </div>
+                                <div>
+                                    <h3 class="font-semibold text-gray-900">Clear accountability</h3>
+                                    <p class="text-gray-600">Assign owners, set priorities and monitor responsibilities.</p>
+                                </div>
+                            </div>
+                            <div class="benefit-item">
+                                <div class="benefit-icon">
+                                    <i data-lucide="target" class="text-blue-600 w-5 h-5"></i>
+                                </div>
+                                <div>
+                                    <h3 class="font-semibold text-gray-900">Smarter focus</h3>
+                                    <p class="text-gray-600">Focus mode and Pomodoro-style timers to boost productivity.</p>
+                                </div>
+                            </div>
+                            <div class="benefit-item">
+                                <div class="benefit-icon">
+                                    <i data-lucide="dollar-sign" class="text-blue-600 w-5 h-5"></i>
+                                </div>
+                                <div>
+                                    <h3 class="font-semibold text-gray-900">Client & payment tracking</h3>
+                                    <p class="text-gray-600">Manage jobs and payments from the same place.</p>
+                                </div>
+                            </div>
+                            <div class="benefit-item">
+                                <div class="benefit-icon">
+                                    <i data-lucide="bar-chart" class="text-blue-600 w-5 h-5"></i>
+                                </div>
+                                <div>
+                                    <h3 class="font-semibold text-gray-900">Actionable insights</h3>
+                                    <p class="text-gray-600">Analytics to spot bottlenecks and improve workflow.</p>
+                                </div>
+                            </div>
+                            <div class="benefit-item">
+                                <div class="benefit-icon">
+                                    <i data-lucide="smartphone" class="text-blue-600 w-5 h-5"></i>
+                                </div>
+                                <div>
+                                    <h3 class="font-semibold text-gray-900">Mobile-friendly</h3>
+                                    <p class="text-gray-600">Consistent experience across devices.</p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="about-section">
+                        <h2 class="text-2xl font-bold text-gray-900 mb-4">Customisable & AI-powered</h2>
+                        <p class="text-gray-700 mb-4">
+                            We build custom apps and websites — including AI features like intelligent task suggestions, auto-prioritisation, natural-language entry and smart reminders — tailored to your workflows.
+                        </p>
+                    </div>
+                    <div class="about-section">
+                        <h2 class="text-2xl font-bold text-gray-900 mb-4">Security & support</h2>
+                        <p class="text-gray-700 mb-4">
+                            We prioritise data privacy, backups and scalable integrations. Our support team handles onboarding, customisation and troubleshooting.
+                        </p>
+                    </div>
+                    <div class="about-section bg-gradient-to-r from-blue-50 to-blue-100 rounded-xl p-6">
+                        <h2 class="text-2xl font-bold text-gray-900 mb-4">Interested in a demo or custom build?</h2>
+                        <div class="space-y-3">
+                            <div class="contact-info">
+                                <span class="contact-icon">📱</span>
+                                <span class="font-medium">WhatsApp: 08136863251</span>
+                                <span class="copy-icon" onclick="copyToClipboard('08136863251')" title="Copy to clipboard">
+                                    <i data-lucide="copy" class="w-4 h-4"></i>
+                                </span>
+                            </div>
+                            <div class="contact-info">
+                                <span class="contact-icon">📧</span>
+                                <a href="mailto:kairotaskmanagement@gmail.com" class="font-medium text-blue-600 hover:underline">kairotaskmanagement@gmail.com</a>
+                            </div>
+                        </div>
+                        <p class="mt-4 text-gray-700">
+                            Kairo by Biznetic AI — make work simple, predictable and productive.
+                        </p>
+                    </div>
+                </div>
+            `;
+        }
+        function copyToClipboard(text) {
+            navigator.clipboard.writeText(text).then(function() {
+                showToast('Copied to clipboard!', 'success');
+            }, function(err) {
+                console.error('Could not copy text: ', err);
+                showToast('Failed to copy to clipboard', 'error');
+            });
+        }
+        function renderTaskCard(task, type) {
+            const updatedPriority = updateTaskPriorityBasedOnDueDate(task);
+            if (task.priority !== updatedPriority) {
+                task.priority = updatedPriority;
+                saveData();
+            }
+            const daysData = calculateDaysBetween(task);
+            let daysInfo = '';
+            if (daysData) {
+                const isOverdue = daysData.remainingDays < 0;
+                daysInfo = `
+                    <div class="flex justify-between items-center text-xs text-gray-500 mt-1">
+                        <span>Duration: ${daysData.totalDays} days</span>
+                        <span class="${isOverdue ? 'text-red-600 font-medium' : ''}">
+                            ${daysData.remainingDays >= 0 ? `${daysData.remainingDays} days left` : `${Math.abs(daysData.remainingDays)} days overdue`}
+                        </span>
+                    </div>
+                `;
+            }
+            let paymentProgressBar = '';
+            if ((type === 'client' && task.totalAmount) || (type === 'personal' && task.totalAmount)) {
+                const totalAmount = parseAmount(task.totalAmount);
+                const outstandingAmount = parseAmount(task.outstandingAmount || '');
+                const paymentProgress = calculatePaymentProgress(totalAmount, {value: totalAmount.value - outstandingAmount.value});
+                paymentProgressBar = `
+                    <div class="flex items-center justify-between mt-2 text-xs">
+                        <span class="text-gray-500">Payment</span>
+                        <span class="font-medium">${paymentProgress}%</span>
+                    </div>
+                    <div class="w-full bg-gray-200 rounded-full h-2 mt-1">
+                        <div class="h-2 rounded-full ${paymentProgress === 100 ? 'bg-green-500' : 'bg-blue-500'} progress-bar" style="width: ${paymentProgress}%"></div>
+                    </div>
+                `;
+            }
+            return `
+                <div class="task-card bg-white rounded-xl p-4 shadow-sm border border-gray-200 hover:shadow-md transition-shadow">
+                    <div class="flex justify-between items-start mb-3">
+                        <div class="flex-1">
+                            ${type === 'client' && task.clientName ? `<p class="text-sm text-gray-600 font-medium">${task.clientName}</p>` : ''}
+                            <h4 class="font-semibold text-gray-900">${task.projectName}</h4>
+                            ${task.description ? `<p class="text-sm text-gray-600 mt-1">${task.description}</p>` : ''}
+                        </div>
+                        <div class="flex gap-1 ml-2">
+                            <button data-task-id="${task.id}" data-task-type="${type}" class="edit-task p-1.5 text-blue-600 hover:bg-blue-50 rounded">
+                                <i data-lucide="edit-3" class="w-4 h-4"></i>
+                            </button>
+                            <button data-task-id="${task.id}" data-task-type="${type}" class="delete-task p-1.5 text-red-600 hover:bg-red-50 rounded">
+                                <i data-lucide="trash-2" class="w-4 h-4"></i>
+                            </button>
+                        </div>
+                    </div>
+                    <div class="space-y-2">
+                        ${task.tags && task.tags.length > 0 ? `
+                            <div class="flex flex-wrap gap-1">
+                                ${task.tags.map(tag => `
+                                    <span class="bg-blue-100 text-blue-800 px-2 py-1 rounded-full text-xs">${tag}</span>
+                                `).join('')}
+                            </div>
+                        ` : ''}
+                        <div class="flex justify-between items-center">
+                            <span class="px-2 py-1 rounded-full text-xs font-medium ${getStatusColor(task.status)}">
+                                ${task.status}
+                            </span>
+                            <span class="text-sm font-medium text-gray-700">${task.progress}%</span>
+                        </div>
+                        <div class="w-full bg-gray-200 rounded-full h-2">
+                            <div class="h-2 rounded-full bg-gradient-to-r ${themes[settings.theme]} progress-bar" style="width: ${task.progress}%"></div>
+                        </div>
+                        <div class="flex justify-between items-center text-xs text-gray-500">
+                            <span>
+                                ${task.startDate ? `Start: ${new Date(task.startDate).toLocaleDateString()}` : ''}
+                            </span>
+                            <span class="${daysData && daysData.remainingDays < 0 ? 'text-red-600 font-medium' : ''}">
+                                ${task.dueDate ? `Due: ${new Date(task.dueDate).toLocaleDateString()}` : ''}
+                            </span>
+                        </div>
+                        ${daysInfo}
+                        ${task.files ? `
+                            <div class="flex items-center gap-1 text-xs text-gray-600">
+                                <i data-lucide="file-text" class="w-3 h-3"></i>
+                                <span>${task.files}</span>
+                            </div>
+                        ` : ''}
+                        <div class="flex justify-between items-center text-xs">
+                            ${task.priority ? `
+                                <span class="px-2 py-1 rounded text-xs font-medium ${
+                                    task.priority === 'Urgent' ? 'bg-red-100 text-red-800' :
+                                    task.priority === 'High' ? 'bg-orange-100 text-orange-800' :
+                                    task.priority === 'Medium' ? 'bg-yellow-100 text-yellow-800' :
+                                    'bg-green-100 text-green-800'
+                                }">
+                                    ${task.priority} Priority
+                                </span>
+                            ` : ''}
+                            ${paymentProgressBar}
+                        </div>
+                    </div>
+                </div>
+            `;
+        }
+        function renderKairoTask(task) {
+            const updatedPriority = updateTaskPriorityBasedOnDueDate(task);
+            if (task.priority !== updatedPriority) {
+                task.priority = updatedPriority;
+                saveData();
+            }
+            const daysData = calculateDaysBetween(task);
+            const isOverdue = daysData && daysData.remainingDays < 0 && task.status !== 'Completed';
+            return `
+                <div class="kairo-task bg-white rounded-lg p-3 shadow border border-gray-200">
+                    <div class="flex justify-between items-start">
+                        <div class="flex-1">
+                            <h4 class="font-medium text-sm">${task.projectName}</h4>
+                            ${task.clientName ? `<p class="text-xs text-gray-600 mt-1">${task.clientName}</p>` : ''}
+                        </div>
+                    </div>
+                    ${task.dueDate ? `
+                        <div class="mt-2 text-xs ${isOverdue ? 'text-red-600 font-medium' : 'text-gray-500'}">
+                            Due: ${new Date(task.dueDate).toLocaleDateString()}
+                        </div>
+                    ` : ''}
+                    <div class="flex justify-between items-center mt-2">
+                        <span class="px-2 py-1 rounded text-xs font-medium ${
+                            task.priority === 'Urgent' ? 'bg-red-100 text-red-800' :
+                            task.priority === 'High' ? 'bg-orange-100 text-orange-800' :
+                            task.priority === 'Medium' ? 'bg-yellow-100 text-yellow-800' :
+                            'bg-green-100 text-green-800'
+                        }">
+                            ${task.priority}
+                        </span>
+                        <div class="flex gap-1">
+                            <button data-task-id="${task.id}" data-task-type="${task.clientName ? 'client' : 'personal'}" class="edit-task p-1 text-blue-600 hover:bg-blue-50 rounded">
+                                <i data-lucide="edit-3" class="w-3 h-3"></i>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            `;
+        }
+        function exportDataToExcel() {
+            const wb = XLSX.utils.book_new();
+            const clientData = clientTasks.map(task => ({
+                'Client Name': task.clientName || '',
+                'Project/Task Name': task.projectName || '',
+                'Description': task.description || '',
+                'Files': task.files || '',
+                'Tags': task.tags ? task.tags.join(', ') : '',
+                'Start Date': task.startDate || '',
+                'Due Date': task.dueDate || '',
+                'Status': task.status || '',
+                'Priority': task.priority || '',
+                'Total Amount': task.totalAmount || '',
+                'Outstanding Amount': task.outstandingAmount || '',
+                'Payment Progress': task.paymentProgress ? `${task.paymentProgress}%` : '',
+                'Created At': task.createdAt ? new Date(task.createdAt).toLocaleString() : ''
+            }));
+            const personalData = personalTasks.map(task => ({
+                'Task Name': task.projectName || '',
+                'Description': task.description || '',
+                'Category': task.category || '',
+                'Tags': task.tags ? task.tags.join(', ') : '',
+                'Start Date': task.startDate || '',
+                'Due Date': task.dueDate || '',
+                'Status': task.status || '',
+                'Priority': task.priority || '',
+                'Total Amount': task.totalAmount || '',
+                'Outstanding Amount': task.outstandingAmount || '',
+                'Payment Progress': task.paymentProgress ? `${task.paymentProgress}%` : '',
+                'Created At': task.createdAt ? new Date(task.createdAt).toLocaleString() : ''
+            }));
+            const clientWS = XLSX.utils.json_to_sheet(clientData);
+            const personalWS = XLSX.utils.json_to_sheet(personalData);
+            XLSX.utils.book_append_sheet(wb, clientWS, 'Client Tasks');
+            XLSX.utils.book_append_sheet(wb, personalWS, 'Personal Tasks');
+            XLSX.writeFile(wb, 'Kairo_Tasks_Export.xlsx');
+            showToast('Data exported to Excel successfully', 'success');
+        }
+        function triggerImport() {
+            document.getElementById('import-file').click();
+        }
+        function importDataFromExcel(event) {
+            const file = event.target.files[0];
+            if (!file) return;
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                try {
+                    const data = new Uint8Array(e.target.result);
+                    const workbook = XLSX.read(data, { type: 'array' });
+                    if (confirm('Importing data will replace your current tasks. Continue?')) {
+                        if (workbook.SheetNames.includes('Client Tasks')) {
+                            const clientWS = workbook.Sheets['Client Tasks'];
+                            const clientData = XLSX.utils.sheet_to_json(clientWS);
+                            clientTasks = clientData.map(item => ({
+                                id: Date.now() + Math.floor(Math.random() * 1000),
+                                clientName: item['Client Name'] || '',
+                                projectName: item['Project/Task Name'] || '',
+                                description: item['Description'] || '',
+                                files: item['Files'] || '',
+                                tags: item['Tags'] ? item['Tags'].split(',').map(tag => tag.trim()) : [],
+                                startDate: item['Start Date'] || '',
+                                dueDate: item['Due Date'] || '',
+                                status: item['Status'] || 'Not Started',
+                                priority: item['Priority'] || 'Medium',
+                                totalAmount: item['Total Amount'] || '',
+                                outstandingAmount: item['Outstanding Amount'] || '',
+                                paymentProgress: item['Payment Progress'] ? parseInt(item['Payment Progress']) : 0,
+                                progress: getProgressFromStatus(item['Status'] || 'Not Started'),
+                                createdAt: item['Created At'] || new Date().toISOString(),
+                                currency: '₦'
+                            }));
+                        }
+                        if (workbook.SheetNames.includes('Personal Tasks')) {
+                            const personalWS = workbook.Sheets['Personal Tasks'];
+                            const personalData = XLSX.utils.sheet_to_json(personalWS);
+                            personalTasks = personalData.map(item => ({
+                                id: Date.now() + Math.floor(Math.random() * 1000),
+                                projectName: item['Task Name'] || '',
+                                description: item['Description'] || '',
+                                category: item['Category'] || '',
+                                tags: item['Tags'] ? item['Tags'].split(',').map(tag => tag.trim()) : [],
+                                startDate: item['Start Date'] || '',
+                                dueDate: item['Due Date'] || '',
+                                status: item['Status'] || 'Not Started',
+                                priority: item['Priority'] || 'Medium',
+                                totalAmount: item['Total Amount'] || '',
+                                outstandingAmount: item['Outstanding Amount'] || '',
+                                paymentProgress: item['Payment Progress'] ? parseInt(item['Payment Progress']) : 0,
+                                progress: getProgressFromStatus(item['Status'] || 'Not Started'),
+                                createdAt: item['Created At'] || new Date().toISOString()
+                            }));
+                        }
+                        saveData();
+                        renderUI();
+                        showToast('Data imported from Excel successfully', 'success');
+                    }
+                } catch (error) {
+                    showToast('Error importing data. Invalid file format.', 'error');
+                    console.error('Import error:', error);
+                }
+            };
+            reader.readAsArrayBuffer(file);
+            event.target.value = '';
+        }
+        function attachDynamicEventListeners() {
+            document.querySelectorAll('.view-all-button').forEach(button => {
+                button.addEventListener('click', function() {
+                    setCurrentPage(this.getAttribute('data-page'));
+                });
+            });
+            document.getElementById('view-all-due-tasks')?.addEventListener('click', function() {
+                setCurrentPage('due-soon');
+            });
+            document.getElementById('add-client-task')?.addEventListener('click', () => showTaskModal('client'));
+            document.getElementById('add-personal-task')?.addEventListener('click', () => showTaskModal('personal'));
+            document.getElementById('add-first-client-task')?.addEventListener('click', () => showTaskModal('client'));
+            document.getElementById('add-first-personal-task')?.addEventListener('click', () => showTaskModal('personal'));
+            document.getElementById('add-task-kairo')?.addEventListener('click', () => showTaskModal('client'));
+            document.querySelectorAll('.edit-task').forEach(button => {
+                button.addEventListener('click', function() {
+                    const taskId = parseInt(this.getAttribute('data-task-id'));
+                    const type = this.getAttribute('data-task-type');
+                    const tasks = type === 'client' ? clientTasks : personalTasks;
+                    const task = tasks.find(t => t.id === taskId);
+                    if (task) showTaskModal(type, task);
+                });
+            });
+            document.querySelectorAll('.delete-task').forEach(button => {
+                button.addEventListener('click', function() {
+                    const taskId = parseInt(this.getAttribute('data-task-id'));
+                    const type = this.getAttribute('data-task-type');
+                    deleteTask(taskId, type);
+                });
+            });
+            document.getElementById('calendar-prev')?.addEventListener('click', () => {
+                calendarDate.setMonth(calendarDate.getMonth() - 1);
+                renderUI();
+            });
+            document.getElementById('calendar-next')?.addEventListener('click', () => {
+                calendarDate.setMonth(calendarDate.getMonth() + 1);
+                renderUI();
+            });
+            document.querySelectorAll('.calendar-day').forEach(day => {
+                day.addEventListener('click', function() {
+                    const date = this.getAttribute('data-date');
+                    selectedCalendarDate = date;
+                    const modal = document.createElement('div');
+                    modal.className = 'fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4';
+                    modal.innerHTML = `
+                        <div class="bg-white rounded-xl p-6 w-full max-w-md shadow-2xl">
+                            <h3 class="text-xl font-bold mb-4">Add Task for ${new Date(date).toLocaleDateString()}</h3>
+                            <div class="space-y-4">
+                                <p class="text-gray-600">What type of task would you like to create?</p>
+                                <div class="flex gap-4 flex-col md:flex-row">
+                                    <button class="flex-1 bg-blue-600 text-white py-3 px-4 rounded-lg hover:bg-blue-700 transition-colors font-medium" id="add-client-task-calendar">
+                                        Client Task
+                                    </button>
+                                    <button class="flex-1 bg-green-600 text-white py-3 px-4 rounded-lg hover:bg-green-700 transition-colors font-medium" id="add-personal-task-calendar">
+                                        Personal Task
+                                    </button>
+                                </div>
+                                <button class="w-full bg-gray-300 text-gray-700 py-2 px-4 rounded-lg hover:bg-gray-400 transition-colors font-medium" id="cancel-calendar-task">
+                                    Cancel
+                                </button>
+                            </div>
+                        </div>
+                    `;
+                    document.body.appendChild(modal);
+                    document.getElementById('add-client-task-calendar').addEventListener('click', () => {
+                        modal.remove();
+                        showTaskModal('client', null, date);
+                    });
+                    document.getElementById('add-personal-task-calendar').addEventListener('click', () => {
+                        modal.remove();
+                        showTaskModal('personal', null, date);
+                    });
+                    document.getElementById('cancel-calendar-task').addEventListener('click', () => {
+                        modal.remove();
+                    });
+                });
+            });
+            const searchInput = document.getElementById('search-input');
+            const statusFilter = document.getElementById('status-filter');
+            const priorityFilter = document.getElementById('priority-filter');
+            if (searchInput) searchInput.addEventListener('input', filterTasks);
+            if (statusFilter) statusFilter.addEventListener('change', filterTasks);
+            if (priorityFilter) priorityFilter.addEventListener('change', filterTasks);
+            document.getElementById('toggle-client-financial')?.addEventListener('click', function() {
+                let isVisible = localStorage.getItem('clientFinancialVisible') !== 'false';
+                localStorage.setItem('clientFinancialVisible', isVisible ? 'false' : 'true');
+                renderUI();
+            });
+            document.getElementById('toggle-personal-financial')?.addEventListener('click', function() {
+                let isVisible = localStorage.getItem('personalFinancialVisible') !== 'false';
+                localStorage.setItem('personalFinancialVisible', isVisible ? 'false' : 'true');
+                renderUI();
+            });
+        }
+        function filterTasks() {
+            const searchTerm = document.getElementById('search-input')?.value.toLowerCase() || '';
+            const statusFilter = document.getElementById('status-filter')?.value || '';
+            const priorityFilter = document.getElementById('priority-filter')?.value || '';
+            const tasks = currentPage === 'client' ? clientTasks : personalTasks;
+            const container = document.getElementById('tasks-container');
+            const filteredTasks = tasks.filter(task => {
+                const matchesSearch = task.projectName.toLowerCase().includes(searchTerm) || 
+                                    (task.description && task.description.toLowerCase().includes(searchTerm)) ||
+                                    (task.clientName && task.clientName.toLowerCase().includes(searchTerm)) ||
+                                    (task.tags && task.tags.some(tag => tag.toLowerCase().includes(searchTerm)));
+                const matchesStatus = statusFilter ? task.status === statusFilter : true;
+                const matchesPriority = priorityFilter ? task.priority === priorityFilter : true;
+                return matchesSearch && matchesStatus && matchesPriority;
+            });
+            container.innerHTML = filteredTasks.map(task => renderTaskCard(task, currentPage)).join('');
+            document.querySelectorAll('.edit-task').forEach(button => {
+                button.addEventListener('click', function() {
+                    const taskId = parseInt(this.getAttribute('data-task-id'));
+                    const type = this.getAttribute('data-task-type');
+                    const tasks = type === 'client' ? clientTasks : personalTasks;
+                    const task = tasks.find(t => t.id === taskId);
+                    if (task) showTaskModal(type, task);
+                });
+            });
+            document.querySelectorAll('.delete-task').forEach(button => {
+                button.addEventListener('click', function() {
+                    const taskId = parseInt(this.getAttribute('data-task-id'));
+                    const type = this.getAttribute('data-task-type');
+                    deleteTask(taskId, type);
+                });
+            });
+        }
+        function showInbox() {
+            const modal = document.getElementById('inbox-modal');
+            modal.classList.remove('hidden');
+            modal.classList.add('flex');
+            renderInbox();
+            // Mark all as read
+            messages.forEach(m => m.read = true);
+            saveData();
+            updateInboxBadge();
+        }
+        function hideInbox() {
+            const modal = document.getElementById('inbox-modal');
+            modal.classList.add('hidden');
+            modal.classList.remove('flex');
+        }
+        function renderInbox() {
+            const container = document.getElementById('inbox-content');
+            if (messages.length === 0) {
+                container.innerHTML = '<p class="text-center text-gray-500 py-8">No messages</p>';
+                return;
+            }
+            container.innerHTML = messages.map(msg => `
+                <div class="border-b border-gray-200 pb-4">
+                    <div class="flex justify-between items-start mb-1">
+                        <h4 class="font-semibold">${msg.subject}</h4>
+                        <span class="text-xs text-gray-500">${new Date(msg.date).toLocaleString()}</span>
+                    </div>
+                    <p class="text-sm text-gray-700 whitespace-pre-line">${msg.body}</p>
+                </div>
+            `).join('');
+            lucide.createIcons();
+        }
+        function updateInboxBadge() {
+            const unreadCount = messages.filter(m => !m.read).length;
+            const badge = document.getElementById('inbox-count');
+            if (unreadCount > 0) {
+                badge.textContent = unreadCount;
+                badge.classList.remove('hidden');
+            } else {
+                badge.classList.add('hidden');
+            }
+        }
+        // 📣 BROADCAST MESSAGE FUNCTION — FOR ADMIN USE
+        // To send a message to ALL users, call this function from the browser console:
+        //   sendBroadcastMessage("Subject", "Your message body here");
+        // Make sure EmailJS is set up with a working template that sends to all registered users.
+        // You'll need a backend service or database to store user emails if you want true broadcast.
+        // Since this is frontend-only, true broadcast isn't possible without a backend.
+        // However, you can simulate it by storing a "global message" in localStorage and checking on load.
+        function sendBroadcastMessage(subject, body) {
+            // In a real app, this would call your backend API
+            // For demo, we'll store a global message flag
+            const globalMessage = {
+                id: Date.now(),
+                from: 'Admin',
+                subject: subject,
+                body: body,
+                date: new Date().toISOString(),
+                read: false
+            };
+            // In real use: POST to your server, which emails all users or pushes to their inbox
+            console.log('Broadcast message (simulated):', globalMessage);
+            alert('Broadcast sent! (In real app, this would notify all users via backend.)');
+        }
+    </script>
+</body>
+</html>
