@@ -1,16 +1,19 @@
-import "./globals.css";
+"use client"
 import Script from 'next/script';
 import React, { useEffect } from 'react';
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     // initialize EmailJS via global script (included below) with placeholder key
-    try { (window as any).emailjs?.init('YOUR_PUBLIC_KEY_HERE'); } catch (e) { /* noop */ }
+    try { (window as unknown as { emailjs?: { init: (key: string) => void } }).emailjs?.init('YOUR_PUBLIC_KEY_HERE'); } catch (e) { /* noop */ }
   }, []);
 
   return (
     <html lang="en">
-      <head />
+      <head>
+        <title>Kairo - Enhanced Task Management</title>
+        <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+      </head>
       <body className="bg-gray-50 min-h-screen">
         {/* External scripts that the original page used via CDN */}
         <Script src="https://cdn.tailwindcss.com" strategy="beforeInteractive" />

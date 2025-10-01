@@ -1,6 +1,9 @@
+'use client';
+
 import React, { useEffect, useState } from 'react';
 import { Task, Notification, Message, Settings } from '../lib/types';
-import { load, save } from '../lib/storage';
+import { themes, statusOptions } from '../lib/constants';
+import { useTasks } from './hooks/useTasks';
 import {
   parseAmount,
   formatAmount,
@@ -9,35 +12,64 @@ import {
   updateTaskPriorityBasedOnDueDate,
   getProgressFromStatus,
 } from '../lib/utils';
+import { initEmailJS, sendRegistrationEmail } from '../lib/email';
+import { save } from '../lib/storage';
+import FirstTimeModal from '../components/modals/FirstTimeModal';
+import TaskModal from '../components/modals/TaskModal';
+import Dashboard from '../components/pages/Dashboard';
 
 // This page implements the full app UI translated from the original HTML into React.
 export default function HomePage() {
-  const [currentPage, setCurrentPage] = useState<string>('dashboard');
-  const [clientTasks, setClientTasks] = useState<Task[]>(() => load<Task[]>('clientTasks', []));
-  const [personalTasks, setPersonalTasks] = useState<Task[]>(() => load<Task[]>('personalTasks', []));
-  const [settings, setSettings] = useState<Settings>(() => load<Settings>('settings', {
-    userName: 'Your Name', logo: null, theme: 'blue', darkMode: false, sidebarCollapsed: false,
-    notifications: { overdue: true, upcoming: true, updates: true, payments: true }
-  }));
-  const [notifications, setNotifications] = useState<Notification[]>(() => load<Notification[]>('notifications', []));
-  const [messages, setMessages] = useState<Message[]>(() => load<Message[]>('messages', []));
-  const [isFirstTimeUser, setIsFirstTimeUser] = useState<boolean>(() => localStorage.getItem('firstTimeUser') === null);
+  const {
+    clientTasks,
+    setClientTasks,
+    personalTasks,
+    setPersonalTasks,
+    settings,
+    setSettings,
+    notifications,
+    setNotifications,
+    messages,
+    setMessages,
+    currentPage,
+    setCurrentPage,
+    editingTask,
+    setEditingTask,
+    taskType,
+    setTaskType,
+    tags,
+    setTags,
+    calendarDate,
+    setCalendarDate,
+    selectedCalendarDate,
+    setSelectedCalendarDate,
+    isFirstTimeUser,
+    setIsFirstTimeUser,
+    saveData,
+    addNotification,
+    showToast,
+    addTask,
+    updateTask,
+    deleteTask
+  } = useTasks();
+
+  // Modal states
+  const [showTaskModal, setShowTaskModal] = useState(false);
+  const [showSettingsModal, setShowSettingsModal] = useState(false);
+  const [showInboxModal, setShowInboxModal] = useState(false);
+  const [showTaskTypeSelector, setShowTaskTypeSelector] = useState(false);
 
   useEffect(() => {
-    // persist on changes
-    save('clientTasks', clientTasks);
-    save('personalTasks', personalTasks);
-    save('settings', settings);
-    save('notifications', notifications);
-    save('messages', messages);
-  }, [clientTasks, personalTasks, settings, notifications, messages]);
-
-  useEffect(() => {
-    if (settings.darkMode) document.body.classList.add('dark-mode'); else document.body.classList.remove('dark-mode');
+    initEmailJS();
+    if (settings.darkMode) {
+      document.body.classList.add('dark-mode');
+    } else {
+      document.body.classList.remove('dark-mode');
+    }
   }, [settings.darkMode]);
 
   useEffect(() => {
-    // On mount, if first time show modal by setting state variable; original DOM modal is preserved via JSX below
+    setIsFirstTimeUser(localStorage.getItem('firstTimeUser') === null);
   }, []);
 
   // We'll render the full original structure as JSX. For brevity some event handlers are implemented minimally
@@ -96,6 +128,28 @@ export default function HomePage() {
         </div>
       )}
 
+      {/* Task Modal */}
+      {showTaskModal && (
+        <TaskModal
+          isOpen={showTaskModal}
+          onClose={() => setShowTaskModal(false)}
+          taskType={taskType}
+          editingTask={editingTask}
+          onSave={(taskData) => {
+            if (editingTask) {
+              updateTask(editingTask.id, taskData);
+            } else {
+              addTask(taskData);
+            }
+            setShowTaskModal(false);
+            setEditingTask(null);
+          }}
+          tags={tags}
+          setTags={setTags}
+          selectedCalendarDate={selectedCalendarDate}
+        />
+      )}
+
       {/* Header */}
       <header id="header" className={`bg-gradient-to-r from-blue-600 to-blue-800 text-white p-4 shadow-lg ${isFirstTimeUser ? 'hidden' : ''}`}>
         <div className="max-w-7xl mx-auto flex justify-between items-center">
@@ -112,14 +166,14 @@ export default function HomePage() {
           <div className="flex items-center gap-3">
             <button id="inbox-button" className="p-2 rounded-lg bg-white bg-opacity-20 hover:bg-opacity-30 transition-colors relative" title="Messages" onClick={() => {/* open inbox below */}}>
               <i data-lucide="mail" className="w-5 h-5"></i>
-              <span id="inbox-count" className="absolute -top-1 -right-1 bg-red-500 text-white rounded-full w-5 h-5 text-xs flex items-center justify-center hidden">0</span>
+              <span id="inbox-count" className="absolute -top-1 -right-1 bg-red-500 text-white rounded-full w-5 h-5 text-xs flex items-center justify-center">0</span>
             </button>
             <button id="dark-mode-toggle" className="p-2 rounded-lg bg-white bg-opacity-20 hover:bg-opacity-30 transition-colors" onClick={() => setSettings(s => ({...s, darkMode: !s.darkMode}))}>
               <i data-lucide={settings.darkMode ? 'sun' : 'moon'} className="w-5 h-5"></i>
             </button>
             <button id="notifications-button" className="p-2 rounded-lg bg-white bg-opacity-20 hover:bg-opacity-30 transition-colors relative">
               <i data-lucide="bell" className="w-5 h-5"></i>
-              <span id="notification-count" className="absolute -top-1 -right-1 bg-red-500 text-white rounded-full w-5 h-5 text-xs flex items-center justify-center hidden">0</span>
+              <span id="notification-count" className="absolute -top-1 -right-1 bg-red-500 text-white rounded-full w-5 h-5 text-xs flex items-center justify-center">0</span>
             </button>
             <button id="settings-button" className="p-2 rounded-lg bg-white bg-opacity-20 hover:bg-opacity-30 transition-colors">
               <i data-lucide="settings" className="w-5 h-5"></i>
@@ -191,23 +245,137 @@ export default function HomePage() {
         <main id="main-content" className="flex-1 p-6 transition-all duration-300">
           {/* Simple page switcher rendering minimal content to match original's structure. Full rendering functions can be implemented similarly. */}
           {currentPage === 'dashboard' && (
-            <div className="space-y-6">{/* we'll render small dashboard summary */}
-              <h2 className="text-2xl font-bold">Dashboard</h2>
-            </div>
+            <Dashboard clientTasks={clientTasks} personalTasks={personalTasks} />
           )}
           {currentPage === 'client' && (
             <div className="space-y-6">
               <div className="flex justify-between items-center flex-col md:flex-row gap-4 md:gap-0">
                 <h2 className="text-2xl font-bold text-gray-900">Client Tasks</h2>
-                <button id="add-client-task" className={`flex items-center gap-2 px-4 py-2.5 rounded-lg text-white bg-gradient-to-r from-blue-600 to-blue-800 hover:opacity-90 transition-opacity font-medium`} onClick={()=>{/* TODO show modal */}}>
+                <button id="add-client-task" className={`flex items-center gap-2 px-4 py-2.5 rounded-lg text-white bg-gradient-to-r from-blue-600 to-blue-800 hover:opacity-90 transition-opacity font-medium`} onClick={() => {
+                  setTaskType('client');
+                  setEditingTask(null);
+                  setShowTaskModal(true);
+                }}>
                   <i data-lucide="plus" className="w-5 h-5"></i>
                   Add Client Task
                 </button>
               </div>
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4" id="tasks-container">
                 {clientTasks.map(task => (
-                  <div key={task.id} className="task-card bg-white rounded-xl p-4 shadow-sm border border-gray-200 hover:shadow-md transition-shadow" dangerouslySetInnerHTML={{__html: `
-                    <div class=\"flex justify-between items-start mb-3\">\n                      <div class=\"flex-1\">${task.clientName?`<p class=\"text-sm text-gray-600 font-medium\">${task.clientName}</p>`:''}<h4 class=\"font-semibold text-gray-900\">${task.projectName}</h4>${task.description?`<p class=\"text-sm text-gray-600 mt-1\">${task.description}</p>`:''}</div>\n                      <div class=\"flex gap-1 ml-2\">\n                        <button data-task-id=\"${task.id}\" data-task-type=\"client\" class=\"edit-task p-1.5 text-blue-600 hover:bg-blue-50 rounded\">\n                          <i data-lucide=\"edit-3\" class=\"w-4 h-4\"></i>\n                        </button>\n                        <button data-task-id=\"${task.id}\" data-task-type=\"client\" class=\"delete-task p-1.5 text-red-600 hover:bg-red-50 rounded\">\n                          <i data-lucide=\"trash-2\" class=\"w-4 h-4\"></i>\n                        </button>\n                      </div>\n                    </div>\n                    <div class=\"space-y-2\">\n                      ${task.tags && task.tags.length>0?`<div class=\"flex flex-wrap gap-1\">${task.tags.map(t=>`<span class=\"bg-blue-100 text-blue-800 px-2 py-1 rounded-full text-xs\">${t}</span>`).join('')}</div>`:''}\n                      <div class=\"flex justify-between items-center\">\n                        <span class=\"px-2 py-1 rounded-full text-xs font-medium ${task.status === 'Completed' ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-800'}\">${task.status}</span>\n                        <span class=\"text-sm font-medium text-gray-700\">${task.progress || 0}%</span>\n                      </div>\n                    </div>`}} />
+                  <div key={task.id} className="task-card bg-white rounded-xl p-4 shadow-sm border border-gray-200 hover:shadow-md transition-shadow">
+                    <div className="flex justify-between items-start mb-3">
+                      <div className="flex-1">
+                        {task.clientName && <p className="text-sm text-gray-600 font-medium">{task.clientName}</p>}
+                        <h4 className="font-semibold text-gray-900">{task.projectName}</h4>
+                        {task.description && <p className="text-sm text-gray-600 mt-1">{task.description}</p>}
+                      </div>
+                      <div className="flex gap-1 ml-2">
+                        <button
+                          className="edit-task p-1.5 text-blue-600 hover:bg-blue-50 rounded"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setTaskType('client');
+                            setEditingTask(task);
+                            setShowTaskModal(true);
+                          }}
+                        >
+                          <i data-lucide="edit-3" className="w-4 h-4"></i>
+                        </button>
+                        <button
+                          className="delete-task p-1.5 text-red-600 hover:bg-red-50 rounded"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            if (confirm('Are you sure you want to delete this task?')) {
+                              deleteTask(task.id, 'client');
+                            }
+                          }}
+                        >
+                          <i data-lucide="trash-2" className="w-4 h-4"></i>
+                        </button>
+                      </div>
+                    </div>
+                    <div className="space-y-2">
+                      {task.tags && task.tags.length > 0 && (
+                        <div className="flex flex-wrap gap-1">
+                          {task.tags.map(tag => (
+                            <span key={tag} className="bg-blue-100 text-blue-800 px-2 py-1 rounded-full text-xs">{tag}</span>
+                          ))}
+                        </div>
+                      )}
+                      <div className="flex justify-between items-center">
+                        <span className={`px-2 py-1 rounded-full text-xs font-medium ${task.status === 'Completed' ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-800'}`}>
+                          {task.status}
+                        </span>
+                        <span className="text-sm font-medium text-gray-700">{task.progress || 0}%</span>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+          {currentPage === 'personal' && (
+            <div className="space-y-6">
+              <div className="flex justify-between items-center flex-col md:flex-row gap-4 md:gap-0">
+                <h2 className="text-2xl font-bold text-gray-900">Personal Tasks</h2>
+                <button id="add-personal-task" className={`flex items-center gap-2 px-4 py-2.5 rounded-lg text-white bg-gradient-to-r from-green-600 to-green-800 hover:opacity-90 transition-opacity font-medium`} onClick={() => {
+                  setTaskType('personal');
+                  setEditingTask(null);
+                  setShowTaskModal(true);
+                }}>
+                  <i data-lucide="plus" className="w-5 h-5"></i>
+                  Add Personal Task
+                </button>
+              </div>
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4" id="personal-tasks-container">
+                {personalTasks.map(task => (
+                  <div key={task.id} className="task-card bg-white rounded-xl p-4 shadow-sm border border-gray-200 hover:shadow-md transition-shadow">
+                    <div className="flex justify-between items-start mb-3">
+                      <div className="flex-1">
+                        <h4 className="font-semibold text-gray-900">{task.projectName}</h4>
+                        {task.description && <p className="text-sm text-gray-600 mt-1">{task.description}</p>}
+                      </div>
+                      <div className="flex gap-1 ml-2">
+                        <button
+                          className="edit-task p-1.5 text-blue-600 hover:bg-blue-50 rounded"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setTaskType('personal');
+                            setEditingTask(task);
+                            setShowTaskModal(true);
+                          }}
+                        >
+                          <i data-lucide="edit-3" className="w-4 h-4"></i>
+                        </button>
+                        <button
+                          className="delete-task p-1.5 text-red-600 hover:bg-red-50 rounded"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            if (confirm('Are you sure you want to delete this task?')) {
+                              deleteTask(task.id, 'personal');
+                            }
+                          }}
+                        >
+                          <i data-lucide="trash-2" className="w-4 h-4"></i>
+                        </button>
+                      </div>
+                    </div>
+                    <div className="space-y-2">
+                      {task.tags && task.tags.length > 0 && (
+                        <div className="flex flex-wrap gap-1">
+                          {task.tags.map(tag => (
+                            <span key={tag} className="bg-green-100 text-green-800 px-2 py-1 rounded-full text-xs">{tag}</span>
+                          ))}
+                        </div>
+                      )}
+                      <div className="flex justify-between items-center">
+                        <span className={`px-2 py-1 rounded-full text-xs font-medium ${task.status === 'Completed' ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-800'}`}>
+                          {task.status}
+                        </span>
+                        <span className="text-sm font-medium text-gray-700">{task.progress || 0}%</span>
+                      </div>
+                    </div>
+                  </div>
                 ))}
               </div>
             </div>

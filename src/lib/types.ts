@@ -10,6 +10,7 @@ export interface Task {
   status: string;
   priority: string;
   totalAmount?: string;
+  amountPaid?: string;
   outstandingAmount?: string;
   paymentProgress?: number;
   currency?: string;
