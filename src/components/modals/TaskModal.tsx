@@ -42,6 +42,9 @@ export default function TaskModal({
     currency: '₦'
   });
 
+  const [showPersonalPayment, setShowPersonalPayment] = useState(false);
+  const [clientDetailsOpen, setClientDetailsOpen] = useState(!editingTask);
+
   useEffect(() => {
     if (editingTask) {
       setFormData({
@@ -60,6 +63,8 @@ export default function TaskModal({
         currency: editingTask.currency || '₦'
       });
       setTags(editingTask.tags || []);
+      setShowPersonalPayment(Boolean(editingTask.totalAmount));
+      setClientDetailsOpen(false); // Collapsed when editing
     } else {
       setFormData({
         clientName: '',
@@ -77,19 +82,31 @@ export default function TaskModal({
         currency: '₦'
       });
       setTags([]);
+      setShowPersonalPayment(false);
+      setClientDetailsOpen(true); // Open when adding new
     }
   }, [editingTask, selectedCalendarDate, setTags]);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
 
+    // Calculate payment progress if amounts are provided
+    let paymentProgress = 0;
+    if (formData.totalAmount && formData.amountPaid) {
+      const total = parseAmount(formData.totalAmount);
+      const paid = parseAmount(formData.amountPaid);
+      paymentProgress = total.value > 0 ? Math.min(100, Math.round((paid.value / total.value) * 100)) : 0;
+    }
+
     const taskData = {
       ...formData,
       tags,
+      paymentProgress,
       priority: updateTaskPriorityBasedOnDueDate({
         ...formData,
         id: 0,
-        status: formData.status
+        status: formData.status,
+        dueDate: formData.dueDate
       } as Task)
     };
 
@@ -108,6 +125,13 @@ export default function TaskModal({
     const outstandingAmount = formatAmount(totalAmount.currency, outstandingValue);
     setFormData(prev => ({ ...prev, outstandingAmount }));
   };
+
+  // Update outstanding amount when total or paid changes
+  useEffect(() => {
+    if (formData.totalAmount || formData.amountPaid) {
+      updateOutstandingAmount();
+    }
+  }, [formData.totalAmount, formData.amountPaid]);
 
   const addTag = () => {
     const input = document.getElementById('tag-input') as HTMLInputElement;
@@ -182,6 +206,21 @@ export default function TaskModal({
               placeholder="Enter task description"
             />
           </div>
+
+          {taskType === 'client' && (
+            <div className="form-input-group">
+              <label className="form-label">
+                <span className="form-emoji">📎</span> Files/Links
+              </label>
+              <input
+                type="text"
+                value={formData.files}
+                onChange={(e) => setFormData(prev => ({ ...prev, files: e.target.value }))}
+                className="w-full p-3 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                placeholder="File paths, URLs, or references"
+              />
+            </div>
+          )}
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div className="form-input-group">
@@ -293,36 +332,82 @@ export default function TaskModal({
             </div>
           </div>
 
-          <div className="form-input-group">
-            <label className="form-label">
-              <span className="form-emoji">💰</span> Payment Details
-            </label>
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              <input
-                type="text"
-                value={formData.totalAmount}
-                onChange={(e) => setFormData(prev => ({ ...prev, totalAmount: e.target.value }))}
-                onBlur={updateOutstandingAmount}
-                className="p-3 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                placeholder="Total Amount"
-              />
-              <input
-                type="text"
-                value={formData.amountPaid}
-                onChange={(e) => setFormData(prev => ({ ...prev, amountPaid: e.target.value }))}
-                onBlur={updateOutstandingAmount}
-                className="p-3 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                placeholder="Amount Paid"
-              />
-              <input
-                type="text"
-                value={formData.outstandingAmount}
-                readOnly
-                className="p-3 border rounded-lg bg-gray-50"
-                placeholder="Outstanding"
-              />
+          {taskType === 'client' && (
+            <div className="form-input-group">
+              <label className="form-label">
+                <span className="form-emoji">💰</span> Payment Details
+              </label>
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <input
+                  type="text"
+                  value={formData.totalAmount}
+                  onChange={(e) => setFormData(prev => ({ ...prev, totalAmount: e.target.value }))}
+                  className="p-3 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  placeholder="₦ Total Amount"
+                />
+                <input
+                  type="text"
+                  value={formData.amountPaid}
+                  onChange={(e) => setFormData(prev => ({ ...prev, amountPaid: e.target.value }))}
+                  className="p-3 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  placeholder="₦ Amount Paid"
+                />
+                <input
+                  type="text"
+                  value={formData.outstandingAmount}
+                  readOnly
+                  className="p-3 border rounded-lg bg-gray-50"
+                  placeholder="₦ Outstanding"
+                />
+              </div>
             </div>
-          </div>
+          )}
+
+          {taskType === 'personal' && (
+            <div className="form-input-group">
+              <div className="flex items-center justify-between mb-3">
+                <label className="form-label">
+                  <span className="form-emoji">💰</span> Payment Details
+                </label>
+                <label className="relative inline-flex items-center cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={showPersonalPayment}
+                    onChange={(e) => setShowPersonalPayment(e.target.checked)}
+                    className="sr-only peer"
+                  />
+                  <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
+                  <span className="ml-3 text-sm font-medium text-gray-700">Include payment</span>
+                </label>
+              </div>
+              
+              {showPersonalPayment && (
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  <input
+                    type="text"
+                    value={formData.totalAmount}
+                    onChange={(e) => setFormData(prev => ({ ...prev, totalAmount: e.target.value }))}
+                    className="p-3 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    placeholder="₦ Total Amount"
+                  />
+                  <input
+                    type="text"
+                    value={formData.amountPaid}
+                    onChange={(e) => setFormData(prev => ({ ...prev, amountPaid: e.target.value }))}
+                    className="p-3 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    placeholder="₦ Amount Paid"
+                  />
+                  <input
+                    type="text"
+                    value={formData.outstandingAmount}
+                    readOnly
+                    className="p-3 border rounded-lg bg-gray-50"
+                    placeholder="₦ Outstanding"
+                  />
+                </div>
+              )}
+            </div>
+          )}
 
           <div className="flex gap-3 pt-6">
             <button
