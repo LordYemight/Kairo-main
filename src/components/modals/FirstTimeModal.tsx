@@ -6,10 +6,9 @@ import { Message } from '@/lib/types';
 interface FirstTimeModalProps {
   isOpen: boolean;
   onSubmit: (data: { fullName: string; gender: string; email: string; whatsapp: string }) => void;
-  onAddMessage: (message: Message) => void;
 }
 
-export default function FirstTimeModal({ isOpen, onSubmit, onAddMessage }: FirstTimeModalProps) {
+export default function FirstTimeModal({ isOpen, onSubmit }: FirstTimeModalProps) {
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     const form = e.target as HTMLFormElement;
@@ -59,15 +58,7 @@ Warmly,
 Maayo  
 Founder, Kairo`;
 
-    const newMessage: Message = {
-      id: Date.now(),
-      from: 'Maayo',
-      subject: 'Welcome to Kairo!',
-      body: welcomeText,
-      date: new Date().toISOString(),
-      read: false
-    };
-    onAddMessage(newMessage);
+    // The welcome message will be added by the parent component
   };
 
   if (!isOpen) return null;

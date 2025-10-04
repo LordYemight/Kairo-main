@@ -18,6 +18,10 @@ export interface Task {
   createdAt?: string;
   completedAt?: string | null;
   category?: string;
+  days?: {
+    totalDays: number;
+    remainingDays: number;
+  };
 }
 
 export interface Notification {

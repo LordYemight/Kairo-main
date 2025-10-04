@@ -4,17 +4,18 @@ import React from 'react';
 import { Task } from '@/lib/types';
 
 interface DashboardProps {
-  clientTasks: Task[];
-  personalTasks: Task[];
+  appState: any;
 }
 
-export default function Dashboard({ clientTasks, personalTasks }: DashboardProps) {
+export default function Dashboard({ appState }: DashboardProps) {
+  const { clientTasks, personalTasks, openTaskModal } = appState;
+  
   const totalTasks = clientTasks.length + personalTasks.length;
-  const completedTasks = [...clientTasks, ...personalTasks].filter(t => t.status === 'Completed').length;
-  const overdueTasks = [...clientTasks, ...personalTasks].filter(t =>
+  const completedTasks = [...clientTasks, ...personalTasks].filter((t: Task) => t.status === 'Completed').length;
+  const overdueTasks = [...clientTasks, ...personalTasks].filter((t: Task) =>
     t.dueDate && new Date(t.dueDate) < new Date() && t.status !== 'Completed'
   ).length;
-  const dueSoonTasks = [...clientTasks, ...personalTasks].filter(t =>
+  const dueSoonTasks = [...clientTasks, ...personalTasks].filter((t: Task) =>
     t.dueDate && new Date(t.dueDate) <= new Date(Date.now() + 7 * 24 * 60 * 60 * 1000) && t.status !== 'Completed'
   ).slice(0, 5);
 
